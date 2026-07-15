@@ -44,27 +44,95 @@ OKABE_ITO = {
 }
 _CYCLE = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 
-# Physical column widths in inches.
+# Physical column widths in inches (generic defaults).
 SINGLE_COLUMN = 3.4
 DOUBLE_COLUMN = 7.0
 
+# Per-journal figure specifications. Widths are in inches (1 mm = 1/25.4 in).
+# ``panel_case`` controls how panel tags are rendered: "upper" -> "A", "B"
+# (Cell Press style), "lower_paren" -> "(a)", "(b)".
+JOURNAL_PRESETS = {
+    # Biophysical Journal (Cell Press / Elsevier): Arial, uppercase bold panel
+    # letters, columns 85 / 114 / 174 mm, min line ~0.5 pt, >=300 dpi raster.
+    "biophysical_journal": {
+        # Arial is the BJ requirement; Liberation Sans is metric-identical to
+        # Arial and is the automatic fallback on Linux systems without Arial.
+        "sans_serif": ["Arial", "Liberation Sans", "Helvetica", "DejaVu Sans"],
+        "family": "sans-serif",
+        "font_size": 7,
+        "single_column": 85 / 25.4,     # ~3.35 in
+        "onehalf_column": 114 / 25.4,   # ~4.49 in
+        "double_column": 174 / 25.4,    # ~6.85 in
+        "panel_case": "upper",
+        "savefig_dpi": 500,
+    },
+    # A neutral generic preset (the previous default behaviour).
+    "generic": {
+        "sans_serif": ["DejaVu Sans", "Arial", "Helvetica"],
+        "family": "sans-serif",
+        "font_size": 8,
+        "single_column": SINGLE_COLUMN,
+        "onehalf_column": 5.0,
+        "double_column": DOUBLE_COLUMN,
+        "panel_case": "lower_paren",
+        "savefig_dpi": 600,
+    },
+}
 
-def set_publication_style(font_size: int = 8, family: str = "sans-serif") -> None:
-    """Apply a journal-friendly matplotlib style (idempotent).
+# Active preset state, updated by set_publication_style().
+_ACTIVE = dict(JOURNAL_PRESETS["generic"])
 
-    Small base font (8 pt) matches a figure printed at column width; line
-    widths and tick sizes are scaled to look correct at that size.
+
+def journal_widths(journal: str = "biophysical_journal") -> dict:
+    """Return the ``single/onehalf/double`` column widths (inches) for a
+    journal preset, e.g. for sizing a figure explicitly."""
+    p = JOURNAL_PRESETS[journal]
+    return {
+        "single": p["single_column"],
+        "onehalf": p["onehalf_column"],
+        "double": p["double_column"],
+    }
+
+
+def set_publication_style(font_size: Optional[int] = None,
+                          family: Optional[str] = None,
+                          journal: str = "biophysical_journal") -> None:
+    """Apply a journal-specific matplotlib style (idempotent).
+
+    Parameters
+    ----------
+    journal:
+        Preset key from :data:`JOURNAL_PRESETS` (default
+        ``"biophysical_journal"``: Arial, 7 pt, uppercase panel letters).
+    font_size, family:
+        Optional overrides of the preset's base font size and family.
+
+    The chosen preset also updates the module-level column-width constants and
+    the panel-label convention used by :func:`panel_label`.
     """
     import matplotlib as mpl
 
+    global _ACTIVE, SINGLE_COLUMN, DOUBLE_COLUMN
+    preset = dict(JOURNAL_PRESETS.get(journal, JOURNAL_PRESETS["generic"]))
+    _ACTIVE = preset
+    if font_size is None:
+        font_size = preset["font_size"]
+    if family is None:
+        family = preset["family"]
+
+    # Expose the preset widths through the module-level constants.
+    SINGLE_COLUMN = preset["single_column"]
+    DOUBLE_COLUMN = preset["double_column"]
+
     mpl.rcParams.update({
         "figure.dpi": 150,
-        "savefig.dpi": 600,
+        "savefig.dpi": preset["savefig_dpi"],
         "savefig.bbox": "tight",
         "savefig.pad_inches": 0.02,
         "pdf.fonttype": 42,        # embed TrueType (editable text, not paths)
         "ps.fonttype": 42,
         "font.family": family,
+        "font.sans-serif": preset["sans_serif"],
         "font.size": font_size,
         "axes.titlesize": font_size,
         "axes.labelsize": font_size,
@@ -86,6 +154,25 @@ def set_publication_style(font_size: int = 8, family: str = "sans-serif") -> Non
     })
 
 
+def panel_label(ax, index_or_letter, x: float = -0.02, y: float = 1.03) -> None:
+    """Add a bold panel label to ``ax`` in the active journal's convention.
+
+    ``index_or_letter`` may be an integer (0 -> first panel) or an explicit
+    letter. Cell Press journals (e.g. Biophysical Journal) use uppercase
+    letters ``A, B, ...``; the generic preset uses ``(a), (b), ...``.
+    """
+    if isinstance(index_or_letter, int):
+        letter = chr(ord("a") + index_or_letter)
+    else:
+        letter = str(index_or_letter)
+    if _ACTIVE.get("panel_case") == "upper":
+        text = letter.upper()
+    else:
+        text = f"({letter.lower()})"
+    ax.text(x, y, text, transform=ax.transAxes, fontweight="bold",
+            va="bottom", ha="right")
+
+
 def _new_fig(width: float = SINGLE_COLUMN, height: Optional[float] = None,
              ncols: int = 1, nrows: int = 1):
     import matplotlib.pyplot as plt
@@ -94,11 +181,6 @@ def _new_fig(width: float = SINGLE_COLUMN, height: Optional[float] = None,
     fig, axes = plt.subplots(nrows, ncols, figsize=(width, height),
                              squeeze=False)
     return fig, axes
-
-
-def _panel_label(ax, label: str) -> None:
-    ax.text(-0.02, 1.02, label, transform=ax.transAxes,
-            fontweight="bold", va="bottom", ha="right")
 
 
 def plot_force_curves(

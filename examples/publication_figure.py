@@ -27,6 +27,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--outdir", default="figures")
     ap.add_argument("--formats", nargs="+", default=["pdf", "png"])
+    ap.add_argument("--journal", default="biophysical_journal",
+                    help="figure style preset (see plotting.JOURNAL_PRESETS)")
+    ap.add_argument("--width", default="double",
+                    choices=["single", "onehalf", "double"])
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
@@ -40,19 +44,18 @@ def main() -> None:
             warnings.simplefilter("ignore")
             curves[h] = IndentationSolver(cfg).run()
 
-    plotting.set_publication_style(font_size=8)
+    plotting.set_publication_style(journal=args.journal)
+    width = plotting.journal_widths(args.journal)[args.width]
     import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(1, 2, figsize=(plotting.DOUBLE_COLUMN, 2.8))
+    fig, axes = plt.subplots(1, 2, figsize=(width, width * 0.42))
 
     plotting.plot_force_curves(
         curves, compare=["hertz", "dimitriadis_bonded"], ax=axes[0])
     plotting.plot_stiffening_ratio(
         curves, compare=["dimitriadis_bonded"], ax=axes[1])
 
-    axes[0].text(-0.02, 1.03, "(a)", transform=axes[0].transAxes,
-                 fontweight="bold", ha="right", va="bottom")
-    axes[1].text(-0.02, 1.03, "(b)", transform=axes[1].transAxes,
-                 fontweight="bold", ha="right", va="bottom")
+    plotting.panel_label(axes[0], 0)   # "A" for Cell Press, "(a)" generic
+    plotting.panel_label(axes[1], 1)   # "B" / "(b)"
 
     stem = os.path.join(args.outdir, "bottom_effect")
     written = plotting.save_figure(fig, stem, formats=args.formats)

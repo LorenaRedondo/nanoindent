@@ -27,6 +27,29 @@ def test_set_style_idempotent():
     assert mpl.rcParams["pdf.fonttype"] == 42
 
 
+def test_biophysical_journal_preset():
+    plotting.set_publication_style(journal="biophysical_journal")
+    import matplotlib as mpl
+    # Arial-first font stack, 7 pt base, ~85/174 mm columns.
+    assert mpl.rcParams["font.sans-serif"][0] == "Arial"
+    assert mpl.rcParams["font.size"] == 7
+    w = plotting.journal_widths("biophysical_journal")
+    assert w["single"] == pytest.approx(85 / 25.4, rel=1e-6)
+    assert w["double"] == pytest.approx(174 / 25.4, rel=1e-6)
+
+
+def test_panel_label_case_by_journal():
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    plotting.set_publication_style(journal="biophysical_journal")
+    plotting.panel_label(ax, 0)
+    assert any(t.get_text() == "A" for t in ax.texts)      # Cell Press uppercase
+    fig2, ax2 = plt.subplots()
+    plotting.set_publication_style(journal="generic")
+    plotting.panel_label(ax2, 0)
+    assert any(t.get_text() == "(a)" for t in ax2.texts)   # generic lowercase
+
+
 def test_plot_force_curves_runs():
     curves = {7.0: _fake_curve(7.0), 14.0: _fake_curve(14.0)}
     fig = plotting.plot_force_curves(curves, compare=["hertz", "dimitriadis_bonded"])
