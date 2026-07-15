@@ -218,9 +218,12 @@ natural AFM scale (the Hertz estimate at δ = 1 nm is ≈ 786 pN).
 
 ## Physics & numerics
 
-- **Boundary conditions**: bottom `z = 0` bonded (`u_r = u_z = 0`); axis
-  `r = 0` symmetry (`u_r = 0`); lateral edge `r = L` traction-free; top `z = h`
-  frictionless unilateral contact against the rigid sphere.
+- **Boundary conditions**: bottom `z = 0` — `substrate="bonded"` fixes it
+  (`u_r = u_z = 0`), `substrate="unbonded"` lets the film slide frictionlessly
+  on the rigid substrate (`u_z = 0`, `u_r` free); axis `r = 0` symmetry
+  (`u_r = 0`); lateral edge `r = L` traction-free; top `z = h` frictionless
+  unilateral contact against the rigid tip. A bonded incompressible film is far
+  stiffer than an unbonded one (see `examples/msnl_bio_dc.py --substrate`).
 - **Gap function**: `g(r) = (z_c − √(R²−r²)) − (h + u_z)`, sphere centre
   `z_c = h + R − δ`, penetration `[−g]₊`. Contact is impossible for `r ≥ R`.
 - **Penalty**: local stiffness `k_pen = α · E / h_local` with `h_local` the

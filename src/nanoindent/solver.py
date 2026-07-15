@@ -137,9 +137,14 @@ class IndentationSolver:
         return E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
 
     def _dirichlet_dofs(self, basis: Basis) -> np.ndarray:
-        # Bottom bonded: u_r = u_z = 0.  Axis: u_r = 0 (u^1 is the r-component).
-        bottom = basis.get_dofs("bottom").all()
+        # Axis: u_r = 0 (u^1 is the r-component). Bottom: bonded fixes both
+        # components (u_r = u_z = 0); unbonded fixes only the normal component
+        # (u_z = 0) so the film slides frictionlessly on the rigid substrate.
         axis_r = basis.get_dofs("axis").all("u^1")
+        if str(self.cfg.substrate).strip().lower() == "unbonded":
+            bottom = basis.get_dofs("bottom").all("u^2")
+        else:
+            bottom = basis.get_dofs("bottom").all()
         return np.unique(np.concatenate([bottom, axis_r]))
 
     @staticmethod

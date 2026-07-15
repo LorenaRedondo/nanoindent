@@ -60,6 +60,13 @@ def test_mesh_edge_must_exceed_contact():
         SimulationConfig(mesh_size_contact=1.0, mesh_size_edge=0.5)
 
 
+def test_invalid_substrate():
+    with pytest.raises(ValueError):
+        SimulationConfig(substrate="glued")
+    SimulationConfig(substrate="bonded")
+    SimulationConfig(substrate="unbonded")
+
+
 def test_invalid_formulation_and_tip():
     with pytest.raises(ValueError):
         SimulationConfig(formulation="explicit")

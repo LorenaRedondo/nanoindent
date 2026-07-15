@@ -67,6 +67,19 @@ def test_mixed_matches_primal_compressible():
     assert rel < 0.02
 
 
+def test_unbonded_softer_than_bonded():
+    # A frictionless-slip substrate lets material shear out -> softer response,
+    # especially for an (near-)incompressible film.
+    common = dict(tip_shape="paraboloid", R=20.0, E=50.0, nu=0.45, h=6.2,
+                  L=80.0, delta_max=2.0, n_steps=4, mesh_size_contact=0.1,
+                  mesh_size_edge=6.0, penalty_alpha=600.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cb = IndentationSolver(SimulationConfig(substrate="bonded", **common)).run()
+        cu = IndentationSolver(SimulationConfig(substrate="unbonded", **common)).run()
+    assert cu.force[-1] < cb.force[-1]
+
+
 def test_csv_roundtrip(small_curve, tmp_path):
     from nanoindent import ForceCurve
     p = tmp_path / "curve.csv"
