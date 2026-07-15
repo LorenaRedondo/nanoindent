@@ -14,8 +14,10 @@ are **scaffolds** validated against in-process mock backends (shared physics via
 from .base import InstrumentAdapter
 from .emulation import BackendSimulator
 from .nanosurf import NanosurfAdapter, MockNanosurfSPM
-from .jpk import (JPKAdapter, MockJPKConnection, SocketJPKConnection,
-                  serve_backend, handle_one_client)
+from .jpk import (
+    JPKAdapter, MockJPKConnection, SocketJPKConnection, JPKInstrumentServer,
+    JPKCapabilities, JPKForceRamp, JPKError, serve_backend, handle_one_client,
+)
 from .asylum import AsylumAdapter, MockIgorBridge
 
 __all__ = [
@@ -26,6 +28,10 @@ __all__ = [
     "JPKAdapter",
     "MockJPKConnection",
     "SocketJPKConnection",
+    "JPKInstrumentServer",
+    "JPKCapabilities",
+    "JPKForceRamp",
+    "JPKError",
     "serve_backend",
     "handle_one_client",
     "AsylumAdapter",
