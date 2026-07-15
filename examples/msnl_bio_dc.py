@@ -92,14 +92,14 @@ def mesh_convergence(outdir, sizes, n_steps):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--outdir", default="results/msnl_bio_dc")
-    ap.add_argument("--contact", type=float, default=0.01,
+    ap.add_argument("--contact", type=float, default=0.005,
                     help="near-contact element size for the production run (nm)")
     ap.add_argument("--quick", action="store_true",
                     help="coarser/faster settings for a smoke run")
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
-    conv_sizes = (0.04, 0.02) if args.quick else (0.04, 0.02, 0.01)
+    conv_sizes = (0.04, 0.02) if args.quick else (0.04, 0.02, 0.01, 0.005)
     n_conv = 6 if args.quick else 8
     n_prod = 12 if args.quick else 20
     contact = max(args.contact, 0.02) if args.quick else args.contact

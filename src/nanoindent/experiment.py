@@ -122,9 +122,10 @@ class ForceCurveData:
         z = self.z.astype(float)
 
         # Orient so the pushing direction has z increasing and, in contact,
-        # deflection rising with z. Sort by oriented z (pre-contact first).
+        # deflection rising with z. Sort by oriented z (pre-contact first). A
+        # perfectly flat deflection (no contact) needs no reorientation.
         s = 1.0
-        if np.corrcoef(z, d_nm)[0, 1] < 0:
+        if np.std(d_nm) > 0 and np.std(z) > 0 and np.corrcoef(z, d_nm)[0, 1] < 0:
             s = -1.0
         zc = s * z
         order = np.argsort(zc)
