@@ -212,7 +212,11 @@ def slb_page():
                 help="Bilayer thickness from the measured-height channel; the "
                      "breakthrough step is in the summary table below.")
     m[2].metric("E (Hertz)", f"{s['E_hertz_MPa']['median']:.1f} MPa")
-    m[3].metric("E (Dimitriadis)", f"{s['E_dimitriadis_MPa']['median']:.1f} MPa")
+    m[3].metric("κ_A (Connell 2010)",
+                f"{s['kappa_A_mN_per_m']['median']:.0f} mN/m",
+                help="Area compressibility modulus for a fluid bilayer; fluid "
+                     "SLBs are ~200–300 mN/m. Much lower values indicate a "
+                     "non-fluid / soft-solid response.")
 
     with st.spinner("Rendering distributions and FEM cross-check…"):
         fig = slb.plot_analysis(an, film_thickness=h, fit_max_delta=cap)

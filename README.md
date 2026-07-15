@@ -388,7 +388,9 @@ fig = slb.plot_analysis(an)         # 4-panel: distributions + FEM cross-check
 Per curve it extracts the **breakthrough (yield) force**, **two bilayer-height
 measures** — (A) contact-point→substrate from the measured-height (capacitive)
 channel, ≈ the true bilayer thickness, and (B) the breakthrough penetration
-step — and the **Young's modulus** fit with **Hertz, Dimitriadis
+step — the **area compressibility modulus κ_A** (Das/Connell 2010,
+`F = π κ_A R z₀²/(2d−z₀)²`, the modulus for a *fluid* bilayer) — and the
+**Young's modulus** fit with **Hertz, Dimitriadis
 2002, Garcia & Garcia 2018, and Chadwick 2002** over a common small-indentation
 window (δ ≲ h, where the finite-thickness corrections are valid), and can run a
 **FEM cross-check** at the fitted modulus. On a real gel-phase SLB map (400

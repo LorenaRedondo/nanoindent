@@ -39,6 +39,7 @@ class CurveResult:
     delta: Optional[np.ndarray] = None       # elastic-region indentation (nm)
     force: Optional[np.ndarray] = None       # elastic-region force (pN)
     height_contact_substrate: Optional[float] = None  # nm — contact->substrate (A)
+    kappa_A: Optional[float] = None          # mN/m — Connell 2010 area compressibility
 
     @property
     def height_step(self) -> Optional[float]:
@@ -72,6 +73,10 @@ class SLBAnalysis:
         return np.array([r.moduli.get(model) for r in self.results
                          if r.moduli.get(model) is not None])
 
+    def kappa_A(self) -> np.ndarray:
+        """Area compressibility modulus κ_A (mN/m), Connell 2010."""
+        return np.array([r.kappa_A for r in self.results if r.kappa_A is not None])
+
     def summary(self) -> dict:
         def stat(a):
             a = np.asarray(a, float)
@@ -83,6 +88,7 @@ class SLBAnalysis:
                "height_contact_substrate_nm": stat(self.heights_contact_substrate())}
         for m in MODULUS_MODELS:
             out[f"E_{m}_MPa"] = stat(self.moduli(m))
+        out["kappa_A_mN_per_m"] = stat(self.kappa_A())
         return out
 
 
@@ -196,8 +202,23 @@ def process_curve(curve, R: float, nu: float, pixel: int = 0,
             except Exception:
                 pass
 
+    # Connell 2010 area compressibility modulus κ_A (mN/m): fit the fluid-
+    # bilayer thinning law F = π κ_A R z0^2/(2d - z0)^2 over z0 < 2d. Uses the
+    # contact->substrate thickness (definition A) as 2d when available.
+    kappa_A = None
+    two_d = height_cs or film_thickness or (2.0 * max(height, 0.5))
+    z_mask = de < 0.85 * two_d
+    de_c, fe_c = de[z_mask], fe[z_mask]
+    if de_c.size >= 4 and two_d > 0:
+        s = np.pi * R * de_c ** 2 / (two_d - de_c) ** 2      # force per unit κ_A
+        denom = float(np.dot(s, s))
+        if denom > 0:
+            kA = float(np.dot(fe_c, s) / denom)
+            if np.isfinite(kA) and kA > 0:
+                kappa_A = kA
+
     return CurveResult(pixel, Fb, height, zc, moduli, de, fe,
-                       height_contact_substrate=height_cs)
+                       height_contact_substrate=height_cs, kappa_A=kappa_A)
 
 
 def analyze_map(fmap, R: float = 20.0, nu: float = 0.5,
@@ -326,6 +347,12 @@ def plot_analysis(analysis: "SLBAnalysis", film_thickness: float = 5.0,
     axs[1, 0].set_title(f"E by model (h={film_thickness} nm, δ≤{fit_max_delta} nm)",
                         fontsize=9)
     axs[1, 0].tick_params(axis="x", rotation=20, labelsize=7)
+    kA = analysis.kappa_A()
+    if kA.size:
+        axs[1, 0].text(0.5, 0.02,
+                       f"Connell 2010 κ$_A$ = {np.median(kA):.0f} mN/m",
+                       transform=axs[1, 0].transAxes, ha="center", va="bottom",
+                       fontsize=7, bbox=dict(boxstyle="round", fc="#F0E442", alpha=0.6))
 
     grid, med = median_elastic_curve(analysis, fit_max_delta)
     axs[1, 1].plot(grid, med, "o-", color="k", ms=3, label="experiment (median)")

@@ -114,6 +114,8 @@ def test_slb_analyze_map_distributions(tmp_path):
         assert s[f"E_{m}_MPa"]["n"] >= 3
     # apparent Hertz modulus exceeds the bottom-effect-corrected ones
     assert an.moduli("hertz").mean() > an.moduli("garcia_bec").mean()
+    # Connell 2010 area compressibility modulus is extracted
+    assert s["kappa_A_mN_per_m"]["n"] >= 3 and an.kappa_A().mean() > 0
 
 
 def test_slb_plot_analysis_runs(tmp_path):
