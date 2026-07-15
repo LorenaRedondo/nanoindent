@@ -63,6 +63,7 @@ class IndentationSolver:
         self.material = None if self.mixed else LinearElastic(cfg.E, cfg.nu)
         self.tip = make_tip(cfg)
 
+        self.history: list = []      # per-step {delta, u, p} when run(store_history=True)
         self.domain: Optional[Domain] = None
         self.basis: Optional[Basis] = None
         self.basis_p: Optional[Basis] = None
@@ -381,7 +382,8 @@ class IndentationSolver:
         return float(np.max(pen)) if pen.size else 0.0
 
     # -- field recovery ----------------------------------------------------
-    def nodal_field(self, name: str = "von_mises", u: Optional[np.ndarray] = None):
+    def nodal_field(self, name: str = "von_mises", u: Optional[np.ndarray] = None,
+                    p: Optional[np.ndarray] = None):
         """Return a scalar field sampled at the mesh vertices (for heatmaps).
 
         The field is recovered from the converged solution by an L2 projection
@@ -390,6 +392,9 @@ class IndentationSolver:
         Supported ``name`` values: ``"von_mises"``, ``"sigma_zz"``,
         ``"pressure"`` (mechanical, ``-tr(sigma)/3``), ``"displacement"``
         (magnitude), ``"uz"``, ``"ur"``. Stresses are in MPa, displacements nm.
+
+        ``u`` / ``p`` override the stored solution (used when animating a stored
+        load-step history); ``p`` is only consulted in the mixed formulation.
         """
         from skfem import ElementTriP1, solve as sksolve
 
@@ -409,7 +414,7 @@ class IndentationSolver:
         ph = None
         if mixed:
             pb = Basis(mesh, self.basis_p.elem, intorder=io)
-            ph = pb.interpolate(self._p)
+            ph = pb.interpolate(self._p if p is None else p)
 
         @BilinearForm
         def mass(a, b, w):
@@ -459,8 +464,12 @@ class IndentationSolver:
         return self.nodal_field("ur", u), self.nodal_field("uz", u)
 
     # -- driver ------------------------------------------------------------
-    def run(self) -> ForceCurve:
-        """Run the full load-stepping simulation and return a ForceCurve."""
+    def run(self, store_history: bool = False) -> ForceCurve:
+        """Run the full load-stepping simulation and return a ForceCurve.
+
+        With ``store_history=True`` the per-step solution ``{delta, u, p}`` is
+        kept in ``self.history`` so the field evolution can be animated.
+        """
         if self.basis is None:
             self.setup()
         cfg = self.cfg
@@ -473,6 +482,7 @@ class IndentationSolver:
         radius = np.zeros(n)
         maxpen = np.zeros(n)
 
+        self.history = []
         u = np.zeros(self.basis.N)
         if self.mixed:
             self._p = np.zeros(self.basis_p.N)
@@ -486,6 +496,12 @@ class IndentationSolver:
             force_bottom[i] = self._bottom_force(u)
             radius[i] = self._contact_radius(fb, u, delta)
             maxpen[i] = self._max_penetration(fb, u, delta)
+            if store_history:
+                self.history.append({
+                    "delta": delta,
+                    "u": u.copy(),
+                    "p": (self._p.copy() if self.mixed else None),
+                })
 
         self._last_u = u
         curve = ForceCurve(

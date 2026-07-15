@@ -456,6 +456,93 @@ def plot_field(solver, field: str = "von_mises", step_delta=None,
     return fig
 
 
+def animate_field(solver, field: str = "von_mises", path: str = "field.mp4",
+                  mirror: bool = True, cmap: str = "jet", levels: int = 40,
+                  fps: int = 8, xlim=None, ylim=None, dpi: int = 150,
+                  show_tip: bool = True):
+    """Animate a field over the indentation load history and save a video.
+
+    ``solver`` must have been run with ``run(store_history=True)`` so that
+    ``solver.history`` holds the per-step solutions. Frames share a fixed colour
+    scale (the global maximum), so the growth of the field is faithful. Writes
+    an MP4 when an ffmpeg writer is available (falls back to an animated GIF for
+    a ``.gif`` path or when ffmpeg is missing); returns the path written.
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.tri as mtri
+    from matplotlib import animation
+
+    hist = getattr(solver, "history", None)
+    if not hist:
+        raise RuntimeError("run the solver with store_history=True first")
+
+    mesh = solver.domain.mesh
+    r0, z = mesh.p[0], mesh.p[1]
+    tris = mesh.t.T
+
+    # Precompute the field at every stored step and a shared colour scale.
+    frames = []
+    vmax = 0.0
+    for state in hist:
+        vals = solver.nodal_field(field, u=state["u"], p=state["p"])
+        frames.append((state["delta"], vals))
+        vmax = max(vmax, float(np.nanmax(vals)))
+    vmax = vmax or 1.0
+
+    if xlim is None:
+        a = np.sqrt(solver.cfg.R * solver.cfg.delta_max)
+        xlim = (-6 * a, 6 * a)
+    if ylim is None:
+        ylim = (0, solver.cfg.h * 1.25)
+
+    fig, ax = plt.subplots(figsize=(5.6, 3.0))
+    cbar_holder = {}
+
+    def draw(frame_idx):
+        ax.clear()
+        delta, vals = frames[frame_idx]
+        levels_arr = np.linspace(0, vmax, levels)
+        for sgn in ((1, -1) if mirror else (1,)):
+            tri = mtri.Triangulation(sgn * r0, z, tris)
+            tcf = ax.tricontourf(tri, vals, levels=levels_arr, cmap=cmap,
+                                 extend="max")
+        if show_tip:
+            rr = np.linspace(xlim[0], xlim[1], 400)
+            ztip = solver.tip.surface_z(np.abs(rr), delta)
+            fin = np.isfinite(ztip)
+            ax.plot(rr[fin], ztip[fin], color="crimson", lw=1.2)
+        ax.set_xlim(*xlim); ax.set_ylim(*ylim); ax.set_aspect("equal")
+        ax.set_xlabel("r (nm)"); ax.set_ylabel("z (nm)")
+        ax.set_title(f"{_FIELD_LABELS.get(field, field)} — "
+                     f"$\\delta$ = {delta:.2f} nm", fontsize=8)
+        if "cb" not in cbar_holder:
+            cbar_holder["cb"] = fig.colorbar(tcf, ax=ax, fraction=0.046, pad=0.03)
+            cbar_holder["cb"].set_label(_FIELD_LABELS.get(field, field), fontsize=8)
+        return []
+
+    anim = animation.FuncAnimation(fig, draw, frames=len(frames), blit=False)
+
+    writer = None
+    want_gif = str(path).lower().endswith(".gif")
+    if not want_gif:
+        try:
+            import imageio_ffmpeg
+            plt.rcParams["animation.ffmpeg_path"] = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            pass
+        if animation.FFMpegWriter.isAvailable():
+            writer = animation.FFMpegWriter(fps=fps, bitrate=2400)
+        else:
+            path = str(path).rsplit(".", 1)[0] + ".gif"
+            want_gif = True
+    if want_gif:
+        writer = animation.PillowWriter(fps=fps)
+
+    anim.save(path, writer=writer, dpi=dpi)
+    plt.close(fig)
+    return path
+
+
 def plot_convergence(records: Sequence["ConvergenceRecord"],
                      width: float = SINGLE_COLUMN, ax=None):
     """Plot a convergence study: force at delta_max vs. the swept parameter."""

@@ -152,6 +152,19 @@ vm = solver.nodal_field("von_mises")                      # raw nodal values
 (~21 MPa at h=7 nm, δ=1 nm) while u_z reaches −δ at the apex and 0 at the
 bonded substrate.*
 
+**Animations.** Run the solver with `run(store_history=True)` and
+`plotting.animate_field` renders the field evolving over the load steps to a
+video (MP4 when an ffmpeg writer is available — `pip install imageio-ffmpeg` —
+otherwise an animated GIF):
+
+```python
+solver = IndentationSolver(cfg); solver.run(store_history=True)
+plotting.animate_field(solver, field="von_mises", path="indent.mp4", fps=12)
+```
+
+`examples/von_mises_video.py` produces the von Mises indentation movie for the
+MSNL-BIO-DC case with one command.
+
 ---
 
 ## Indenter geometry
