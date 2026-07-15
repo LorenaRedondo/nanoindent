@@ -30,7 +30,7 @@ import streamlit as st
 
 from nanoindent import (
     SimulationConfig, IndentationSolver, analytics, fit_modulus,
-    read_jpk_map, slb, video as hsvideo,
+    read_jpk_map, slb, video as hsvideo, streaming,
 )
 from nanoindent.contact import make_tip
 
@@ -359,13 +359,113 @@ def hsafm_page():
 
 
 # ==========================================================================
+# Live control (simulated) page
+# ==========================================================================
+@st.cache_data(show_spinner=False)
+def run_control(scan_px, px, dt, npart, D0, nframes, apply, seed):
+    kw = dict(scan_px=scan_px, pixel_size_nm=px, frame_interval_s=dt,
+              n_particles=npart, D_nm2_per_s=D0, max_frames=nframes, seed=seed)
+    inst = streaming.SimulatedInstrument(**kw)
+    an = streaming.StreamingAnalyzer(px, dt, max_step_px=6.0)
+    rep = streaming.run_control_loop(
+        inst, an,
+        streaming.combine_policies(streaming.recenter_on_brightest(),
+                                   streaming.ramp_on_event()),
+        apply=apply)
+    off = float(np.sqrt(np.mean(np.sum(inst.target_offset_px() ** 2, axis=1))))
+    return {
+        "proc_ms": rep.proc_ms, "commands": rep.commands, "events": rep.events,
+        "kept_up": rep.kept_up(), "rtf": rep.real_time_factor(),
+        "n_ramps": len(inst.ramp_events), "rms_offset": off,
+        "offsets": inst.target_offset_px(), "scan_px": scan_px, "dt": dt,
+    }
+
+
+def control_page():
+    st.title("🎯 Live control (simulated)")
+    st.caption("Pseudo-realtime closed loop against a **reactive simulated "
+               "instrument** — no hardware. Frames stream in, particles are "
+               "tracked online, and a policy re-centres the scan window on the "
+               "brightest feature. Swap the simulator for a vendor adapter with "
+               "the same `__iter__` / `send` contract to drive a real "
+               "microscope. This loop is *supervisory* only — fast tip "
+               "protection stays on the instrument's controller.")
+
+    st.sidebar.header("Simulated instrument")
+    scan_px = st.sidebar.select_slider("Scan size (px)", [32, 48, 64, 96, 128],
+                                       value=64)
+    px = st.sidebar.number_input("Pixel size (nm/px)", 0.5, 20.0, 2.0, 0.5)
+    fps = st.sidebar.slider("Frame rate (fps)", 5, 100, 20, 5)
+    dt = 1.0 / fps
+    npart = st.sidebar.slider("Particles", 1, 10, 4)
+    D0 = st.sidebar.slider("Diffusion D (nm²/s)", 20.0, 600.0, 200.0, 10.0)
+    nframes = st.sidebar.slider("Frames", 30, 300, 150, 10)
+
+    st.sidebar.header("Control")
+    apply = st.sidebar.checkbox("Close the loop (re-center + ramps)", True)
+
+    if not st.button("▶ Run control loop", type="primary"):
+        st.info("Set parameters and press **Run control loop**. Compare the "
+                "closed loop (feature stays centred) against the open loop "
+                "(feature drifts out of view).")
+        return
+
+    with st.spinner("Streaming frames and closing the loop…"):
+        res = run_control(scan_px, px, dt, npart, D0, nframes, apply, seed=1)
+        # open-loop baseline (same seed) for comparison
+        base = run_control(scan_px, px, dt, npart, D0, nframes, False, seed=1)
+
+    c = st.columns(4)
+    c[0].metric("Analysis / frame",
+                f"{np.median(res['proc_ms'][1:]):.2f} ms",
+                help=f"Frame period is {dt*1e3:.0f} ms.")
+    c[1].metric("Real-time factor", f"{res['rtf']:.2f}×",
+                help="Median analysis time ÷ frame period (<1 = spare headroom).")
+    c[2].metric("Keeps up", "✅ yes" if res["kept_up"] else "⚠️ no")
+    c[3].metric("Commands", f"{len(res['commands'])}")
+
+    d = st.columns(2)
+    d[0].metric("Target offset (closed loop)", f"{res['rms_offset']:.1f} px",
+                help="RMS distance of the followed feature from the window "
+                     "centre — small means the loop holds it in view.")
+    d[1].metric("Target offset (open loop)", f"{base['rms_offset']:.1f} px",
+                delta=f"{base['rms_offset'] - res['rms_offset']:.1f} px tighter",
+                delta_color="inverse")
+
+    fig, axs = plt.subplots(1, 2, figsize=(11, 4))
+    fr = np.arange(len(res["proc_ms"]))
+    axs[0].plot(fr, res["proc_ms"], ".-", ms=3, color="#0072B2")
+    axs[0].axhline(dt * 1e3, color="crimson", ls="--",
+                   label=f"frame period {dt*1e3:.0f} ms")
+    axs[0].set_xlabel("frame"); axs[0].set_ylabel("analysis time (ms)")
+    axs[0].set_ylim(bottom=0); axs[0].legend(fontsize=8); axs[0].grid(alpha=0.25)
+    axs[0].set_title("real-time headroom", fontsize=10)
+
+    half = scan_px / 2
+    axs[1].plot(res["offsets"][:, 1], res["offsets"][:, 0], ".-", ms=3,
+                color="#009E73", label="closed loop")
+    axs[1].plot(base["offsets"][:, 1], base["offsets"][:, 0], ".-", ms=2,
+                color="gray", alpha=0.6, label="open loop")
+    axs[1].scatter([0], [0], marker="+", s=140, color="crimson")
+    axs[1].set_xlim(-half, half); axs[1].set_ylim(-half, half)
+    axs[1].set_aspect("equal"); axs[1].legend(fontsize=8)
+    axs[1].set_xlabel("x offset (px)"); axs[1].set_ylabel("y offset (px)")
+    axs[1].set_title("feature vs window centre", fontsize=10)
+    fig.tight_layout()
+    st.pyplot(fig)
+
+
+# ==========================================================================
 PAGE = st.sidebar.radio(
     "Page",
-    ["FEM simulation", "SLB force-map analysis", "HS-AFM movie analysis"])
+    ["FEM simulation", "SLB force-map analysis", "HS-AFM movie analysis",
+     "Live control (simulated)"])
 st.sidebar.markdown("---")
 if PAGE == "FEM simulation":
     fem_page()
 elif PAGE == "SLB force-map analysis":
     slb_page()
-else:
+elif PAGE == "HS-AFM movie analysis":
     hsafm_page()
+else:
+    control_page()

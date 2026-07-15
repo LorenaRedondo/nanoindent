@@ -437,6 +437,45 @@ The same analysis is in the web dashboard (HS-AFM movie page). Instrument
 readers target the documented layouts — verify the height calibration against
 your own instrument.
 
+### Pseudo-realtime streaming & (simulated) closed-loop control
+
+`nanoindent.streaming` turns the batch HS-AFM analysis into an **online** loop
+and adds a **reactive simulated instrument**, so a feedback experiment can be
+built and tested with no hardware. The architecture has three seams —
+`FrameSource` (read) → `StreamingAnalyzer` (analyse) → *policy* (decide) →
+`FrameSource.send` (actuate):
+
+```python
+from nanoindent import (SimulatedInstrument, StreamingAnalyzer,
+                        run_control_loop, recenter_on_brightest)
+inst = SimulatedInstrument(scan_px=64, frame_interval_s=0.05, D_nm2_per_s=200.0)
+an   = StreamingAnalyzer(inst.pixel_size_nm, inst.frame_interval_s)
+rep  = run_control_loop(inst, an, recenter_on_brightest())   # keep a feature centred
+print(rep.kept_up(), rep.real_time_factor())                 # True, ~0.06x
+```
+
+`StreamingAnalyzer.push(frame)` returns a live `AnalysisState` (incremental
+particle tracks, rolling stats, online drift and step/event detection, a running
+diffusion estimate). Policies are plain callables `AnalysisState -> [Command]`
+(`recenter_on_brightest`, `recenter_on_longest_track`, `ramp_on_event`,
+`pause_on_event`, `combine_policies`). Running `examples/streaming_control.py`
+(64×64 at 20 fps):
+
+```
+acquisition: 64x64 px @ 50 ms/frame (20 fps)
+analysis   : median 3.12 ms/frame (real-time factor 0.06x, keeps up: True)
+following  : target RMS offset 2.9 px (closed) vs 35.8 px (open) — 12.3x tighter
+```
+
+so the compute has **~15× headroom** over the frame period, and closing the loop
+keeps the tracked feature **~12× closer** to the window centre than open loop —
+the loop demonstrably closes. To drive a real microscope, replace
+`SimulatedInstrument` with a thin vendor adapter exposing the same `__iter__` /
+`send` contract. **Safety:** this is a *supervisory* loop (frame-rate, high-level
+commands); the fast z-feedback that protects the tip runs on the instrument's own
+kHz–MHz controller and must stay there. The web dashboard's *Live control
+(simulated)* page runs the whole thing interactively.
+
 ### Synthetic data & inverse analysis (end-to-end double-check)
 
 `nanoindent.dataset` closes the loop: it generates a **realistic AFM force
@@ -500,6 +539,7 @@ src/nanoindent/
 ├── experiment.py   # raw AFM ingestion (JPK/Bruker/Asylum/CSV) + calibration
 ├── slb.py          # supported-lipid-bilayer force-map analysis (breakthrough, κ_A, E)
 ├── video.py        # HS-AFM movies: readers, drift, tracking, diffusion, events
+├── streaming.py    # online analyzer + simulated instrument + closed-loop control
 └── plotting.py     # publication-quality figures (vector output, CB-safe)
 examples/
 ├── paper_reproduction.py       ├── model_comparison.py
@@ -507,7 +547,8 @@ examples/
 ├── synthetic_analysis.py       ├── field_heatmap.py
 ├── analyze_afm_experiment.py   ├── publication_figure.py
 ├── msnl_bio_dc.py              ├── slb_force_map.py
-├── hsafm_video.py              └── (case study: R=20 nm, h=6.2 nm)
+├── hsafm_video.py              ├── streaming_control.py
+└── (msnl_bio_dc case study: R=20 nm, h=6.2 nm)
 tests/               # unit + physics-validation (slow) suites
 ```
 
