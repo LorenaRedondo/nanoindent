@@ -32,6 +32,7 @@ test = ["pytest>=7.0", "igor2>=0.5", "hypothesis>=6.0"]
 viz = ["pyvista>=0.40", "imageio-ffmpeg>=0.4"]   # imageio-ffmpeg: MP4 animations
 afm = ["igor2>=0.5"]   # Asylum Research .ibw reading
 video = ["Pillow>=9.0", "imageio-ffmpeg>=0.4"]   # HS-AFM movies: TIFF reader + MP4 export
+docs = ["python-docx>=1.0"]   # .docx methodology export (examples/msnl_bio_dc_unbonded_5nm.py)
 web = ["streamlit>=1.30"]   # interactive dashboard (dashboard/app.py)
 
 [project.urls]
