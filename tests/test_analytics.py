@@ -59,6 +59,16 @@ def test_sneddon_cone_scaling():
     assert F[1] == pytest.approx(expected)
 
 
+def test_connell_area_compressibility():
+    # F = pi * kappa_A * R * z0^2 / (2d - z0)^2 ; units: mN/m, nm -> pN
+    F = analytics.connell_force(1.0, 20.0, 250.0, 5.0)
+    assert float(F) == pytest.approx(np.pi * 250.0 * 20.0 * 1.0 / (5.0 - 1.0) ** 2)
+    # diverges toward the substrate (z0 -> 2d) and is 0 at z0 = 0
+    assert analytics.connell_force(0.0, 20.0, 250.0, 5.0) == 0.0
+    assert analytics.connell_force(4.9, 20.0, 250.0, 5.0) > \
+        analytics.connell_force(2.0, 20.0, 250.0, 5.0)
+
+
 def test_paraboloid_equals_hertz():
     d = np.array([0.3, 0.7])
     assert np.allclose(

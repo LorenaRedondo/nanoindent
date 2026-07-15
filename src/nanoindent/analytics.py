@@ -147,6 +147,26 @@ def chadwick_force(delta, R: float, E: float, h: float) -> np.ndarray:
     return (2.0 * np.pi / 3.0) * E * R ** 2 * np.clip(delta, 0.0, None) ** 3 / h ** 3
 
 
+def connell_force(delta, R: float, kappa_A: float, bilayer_thickness: float) -> np.ndarray:
+    """Das/Connell 2010 force for an AFM tip thinning a supported *fluid* bilayer.
+
+    ``F = pi * kappa_A * R * z0**2 / (2d - z0)**2`` (Das, Sheikh, Olmsted &
+    Connell, *Phys. Rev. E* **82**, 041920, 2010), where the indentation force
+    of a fluid supported lipid bilayer is dominated by the membrane **area
+    compressibility modulus** ``kappa_A`` (a 2-D modulus) rather than a bulk
+    Young's modulus.
+
+    Units: ``kappa_A`` in **mN/m**, ``R`` and ``bilayer_thickness`` (= 2d) and
+    ``delta`` (= z0) in nm, force returned in **pN** (1 mN/m · nm = 1 pN). Valid
+    only for ``z0 < 2d`` (the tip cannot thin the bilayer past zero); the force
+    diverges as ``z0 -> 2d``.
+    """
+    delta = np.asarray(delta, dtype=float)
+    two_d = float(bilayer_thickness)
+    z0 = np.clip(delta, 0.0, 0.999 * two_d)
+    return np.pi * kappa_A * R * z0 ** 2 / (two_d - z0) ** 2
+
+
 def paraboloid_force(delta, R: float, E: float, nu: float) -> np.ndarray:
     """Force for a paraboloidal tip on a half-space.
 
