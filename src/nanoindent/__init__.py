@@ -31,6 +31,13 @@ from .experiment import (
     read_bruker, analyze_experiment, synthetic_raw_curve, JPKForceMap,
 )
 from . import slb
+from . import video
+from .video import (
+    AFMVideo, synthetic_video, load_video, read_asd, read_tiff, read_numpy,
+    read_jpk_qi, drift_correct, per_frame_stats, detect_particles, track,
+    msd, diffusion_coefficient, ensemble_diffusion, height_timeseries,
+    detect_events, animate_video, plot_summary,
+)
 from . import plotting
 
 __all__ = [
@@ -65,6 +72,25 @@ __all__ = [
     "synthetic_raw_curve",
     "JPKForceMap",
     "slb",
+    "video",
+    "AFMVideo",
+    "synthetic_video",
+    "load_video",
+    "read_asd",
+    "read_tiff",
+    "read_numpy",
+    "read_jpk_qi",
+    "drift_correct",
+    "per_frame_stats",
+    "detect_particles",
+    "track",
+    "msd",
+    "diffusion_coefficient",
+    "ensemble_diffusion",
+    "height_timeseries",
+    "detect_events",
+    "animate_video",
+    "plot_summary",
     "plotting",
     "synthetic_force_curve",
     "fit_modulus",

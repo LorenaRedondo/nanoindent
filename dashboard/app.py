@@ -30,7 +30,7 @@ import streamlit as st
 
 from nanoindent import (
     SimulationConfig, IndentationSolver, analytics, fit_modulus,
-    read_jpk_map, slb,
+    read_jpk_map, slb, video as hsvideo,
 )
 from nanoindent.contact import make_tip
 
@@ -236,9 +236,136 @@ def slb_page():
 
 
 # ==========================================================================
-PAGE = st.sidebar.radio("Page", ["FEM simulation", "SLB force-map analysis"])
+# HS-AFM video page
+# ==========================================================================
+@st.cache_data(show_spinner=False)
+def load_movie(raw: bytes, name: str, px: float, dt: float):
+    suffix = os.path.splitext(name)[1] or ".npy"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as fh:
+        fh.write(raw)
+        path = fh.name
+    try:
+        if suffix.lower() in (".npy", ".npz"):
+            vid = hsvideo.read_numpy(path, pixel_size_nm=px, frame_interval_s=dt)
+        elif suffix.lower() in (".tif", ".tiff"):
+            vid = hsvideo.read_tiff(path, pixel_size_nm=px, frame_interval_s=dt)
+        elif suffix.lower() == ".asd":
+            vid = hsvideo.read_asd(path)
+        else:
+            vid = hsvideo.load_video(path)
+    finally:
+        os.unlink(path)
+    return vid
+
+
+def hsafm_page():
+    st.title("🎬 HS-AFM movie analysis")
+    st.caption("Upload a high-speed AFM movie (`.asd`, multi-page TIFF, or "
+               "NumPy `.npy`/`.npz`) — or use a synthetic diffusing-particle "
+               "movie — for drift correction, per-frame statistics, particle "
+               "tracking, diffusion coefficients, and event detection.")
+
+    src = st.sidebar.radio("Source", ["Synthetic demo", "Upload file"])
+    st.sidebar.header("Calibration")
+    px = st.sidebar.number_input("Pixel size (nm/px)", 0.1, 100.0, 2.0, 0.1)
+    dt = st.sidebar.number_input("Frame interval (s)", 0.001, 10.0, 0.1,
+                                 0.001, format="%.3f")
+
+    vid = None
+    if src == "Synthetic demo":
+        st.sidebar.header("Synthetic movie")
+        nfr = st.sidebar.slider("Frames", 20, 200, 100, 10)
+        npart = st.sidebar.slider("Particles", 1, 12, 5)
+        D0 = st.sidebar.slider("True D (nm²/s)", 20.0, 600.0, 200.0, 10.0)
+        drift = st.sidebar.slider("Drift (nm/frame)", 0.0, 2.0, 0.0, 0.1)
+        vid = hsvideo.synthetic_video(n_frames=nfr, size=80, n_particles=npart,
+                                      pixel_size_nm=px, frame_interval_s=dt,
+                                      D_nm2_per_s=D0, drift_nm_per_frame=drift,
+                                      seed=0)
+    else:
+        up = st.file_uploader("HS-AFM movie",
+                              type=["asd", "tif", "tiff", "npy", "npz"])
+        if up is None:
+            st.info("Upload an `.asd`, TIFF, or NumPy movie to begin.")
+            return
+        try:
+            vid = load_movie(up.getvalue(), up.name, px, dt)
+        except Exception as exc:
+            st.error(f"Could not read movie: {exc}"); return
+
+    st.sidebar.header("Analysis")
+    do_drift = st.sidebar.checkbox("Drift-correct (phase correlation)", False)
+    max_step = st.sidebar.slider("Max linking step (px)", 2.0, 20.0, 6.0, 0.5)
+    min_len = st.sidebar.slider("Min track length", 3, 30, 8)
+
+    if do_drift:
+        vid = hsvideo.drift_correct(vid, reference="previous")
+
+    c = st.columns(4)
+    c[0].metric("Frames", vid.n_frames)
+    c[1].metric("Frame size", f"{vid.shape[1]}×{vid.shape[2]}")
+    c[2].metric("Duration", f"{vid.duration():.2f} s")
+    c[3].metric("Frame rate", f"{vid.fps:.1f} fps")
+
+    with st.spinner("Tracking particles and fitting diffusion…"):
+        tracks = hsvideo.track(vid, max_step_px=max_step)
+        D = hsvideo.ensemble_diffusion(tracks, vid.pixel_size_nm,
+                                       vid.frame_interval_s, min_length=min_len)
+
+    m = st.columns(3)
+    m[0].metric("Tracks", len(tracks))
+    m[1].metric("Fitted (≥ min length)", int(D.size))
+    m[2].metric("Median D",
+                f"{np.median(D):.0f} nm²/s" if D.size else "—",
+                help="From the initial MSD slope, MSD = 4·D·t (2-D).")
+    if vid.metadata.get("true_D_nm2_per_s"):
+        st.caption(f"Ground-truth D for this synthetic movie: "
+                   f"**{vid.metadata['true_D_nm2_per_s']:.0f} nm²/s** — centroid "
+                   f"tracking of overlapping blobs typically underestimates it.")
+
+    with st.spinner("Rendering movie summary…"):
+        fig = hsvideo.plot_summary(vid, tracks=tracks)
+    st.pyplot(fig)
+
+    # per-frame stats + event detection on the mean-height series
+    stats = hsvideo.per_frame_stats(vid)
+    t, series = hsvideo.height_timeseries(vid)
+    events = hsvideo.detect_events(series, t)
+    a, b = st.columns(2)
+    with a:
+        st.subheader("Height / roughness vs time")
+        fig2, ax = plt.subplots(figsize=(5, 3.4))
+        ax.plot(stats["time_s"], stats["mean_height_nm"], label="mean height")
+        ax.plot(stats["time_s"], stats["rms_roughness_nm"], label="RMS roughness")
+        for _, te, _ in events:
+            ax.axvline(te, color="crimson", ls=":", lw=0.8)
+        ax.set_xlabel("time (s)"); ax.set_ylabel("nm")
+        ax.legend(fontsize=8); ax.grid(alpha=0.25)
+        st.pyplot(fig2)
+    with b:
+        st.subheader("Detected events")
+        if events:
+            st.dataframe({"frame": [e[0] for e in events],
+                          "time_s": [f"{e[1]:.3f}" for e in events],
+                          "Δheight_nm": [f"{e[2]:.2f}" for e in events]})
+        else:
+            st.write("No step-like events above the MAD threshold.")
+        csv = "time_s,mean_height_nm,rms_roughness_nm,coverage\n" + "\n".join(
+            f"{ti:.6g},{h:.6g},{r:.6g},{cv:.6g}" for ti, h, r, cv in zip(
+                stats["time_s"], stats["mean_height_nm"],
+                stats["rms_roughness_nm"], stats["coverage"]))
+        st.download_button("⬇ Per-frame stats CSV", csv, "hsafm_stats.csv",
+                           "text/csv")
+
+
+# ==========================================================================
+PAGE = st.sidebar.radio(
+    "Page",
+    ["FEM simulation", "SLB force-map analysis", "HS-AFM movie analysis"])
 st.sidebar.markdown("---")
 if PAGE == "FEM simulation":
     fem_page()
-else:
+elif PAGE == "SLB force-map analysis":
     slb_page()
+else:
+    hsafm_page()

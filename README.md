@@ -406,6 +406,37 @@ reads ~250 MPa). Instrument readers target the documented layouts; the CSV path
 and calibration pipeline are backend-free and fully tested — verify the binary
 readers against your own exports.
 
+### High-speed AFM movies (imaging dynamics)
+
+`nanoindent.video` adds a **time-resolved imaging** track alongside the
+force-indentation core: HS-AFM records topography frames at video rate, so the
+analysis is about *dynamics* (diffusion, assembly, conformational change) rather
+than stiffness. Readers cover **Ando/RIBM `.asd`** (version 1), **multi-page
+TIFF**, **JPK QI topography**, and **NumPy `.npy`/`.npz`**; a synthetic
+diffusing-particle movie with a known diffusion coefficient validates the whole
+pipeline.
+
+```python
+from nanoindent import video as V
+vid = V.load_video("scan.asd")              # or read_tiff / read_numpy
+vid = V.drift_correct(vid)                   # phase-correlation registration
+tracks = V.track(vid, max_step_px=6.0)       # detect + link particles
+D = V.ensemble_diffusion(tracks, vid.pixel_size_nm, vid.frame_interval_s)
+events = V.detect_events(*V.height_timeseries(vid))   # step-like binding/assembly
+V.plot_summary(vid, tracks)                  # 4-panel: frame, stats, tracks, D
+V.animate_video(vid, "movie.mp4", tracks=tracks)      # MP4 (ffmpeg) or GIF
+```
+
+It provides drift correction, per-frame statistics (mean height, RMS roughness,
+coverage), particle detection + nearest-neighbour tracking, **MSD → diffusion
+coefficient** (`MSD = 4Dt`), region height-vs-time series with **event (step)
+detection**, and playback. On the synthetic movie (`examples/hsafm_video.py`,
+ground-truth *D* = 200 nm²/s) the pipeline recovers *D* ≈ 170 nm²/s — centroid
+tracking of overlapping blobs biases *D* low, a known and documented limitation.
+The same analysis is in the web dashboard (HS-AFM movie page). Instrument
+readers target the documented layouts — verify the height calibration against
+your own instrument.
+
 ### Synthetic data & inverse analysis (end-to-end double-check)
 
 `nanoindent.dataset` closes the loop: it generates a **realistic AFM force
@@ -467,13 +498,16 @@ src/nanoindent/
 ├── convergence.py  # mesh / penalty / load-step studies
 ├── dataset.py      # synthetic AFM data + modulus-recovery inverse analysis
 ├── experiment.py   # raw AFM ingestion (JPK/Bruker/Asylum/CSV) + calibration
+├── slb.py          # supported-lipid-bilayer force-map analysis (breakthrough, κ_A, E)
+├── video.py        # HS-AFM movies: readers, drift, tracking, diffusion, events
 └── plotting.py     # publication-quality figures (vector output, CB-safe)
 examples/
 ├── paper_reproduction.py       ├── model_comparison.py
 ├── hertz_validation.py         ├── chadwick_verification.py
 ├── synthetic_analysis.py       ├── field_heatmap.py
 ├── analyze_afm_experiment.py   ├── publication_figure.py
-├── msnl_bio_dc.py              └── (case study: R=20 nm, h=6.2 nm)
+├── msnl_bio_dc.py              ├── slb_force_map.py
+├── hsafm_video.py              └── (case study: R=20 nm, h=6.2 nm)
 tests/               # unit + physics-validation (slow) suites
 ```
 
