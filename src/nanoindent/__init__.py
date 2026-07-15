@@ -24,8 +24,13 @@ from . import analytics
 from .analytics import compare_models, BEC_MODELS
 from . import convergence
 from . import dataset
-from . import plotting
 from .dataset import synthetic_force_curve, fit_modulus, SyntheticDataset, ModulusFit
+from . import experiment
+from .experiment import (
+    ForceCurveData, load_afm, read_csv, read_ibw, read_jpk, read_bruker,
+    analyze_experiment, synthetic_raw_curve,
+)
+from . import plotting
 
 __all__ = [
     "SimulationConfig",
@@ -47,6 +52,15 @@ __all__ = [
     "BEC_MODELS",
     "convergence",
     "dataset",
+    "experiment",
+    "ForceCurveData",
+    "load_afm",
+    "read_csv",
+    "read_ibw",
+    "read_jpk",
+    "read_bruker",
+    "analyze_experiment",
+    "synthetic_raw_curve",
     "plotting",
     "synthetic_force_curve",
     "fit_modulus",

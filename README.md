@@ -310,6 +310,40 @@ asymptotic thin-**incompressible**-layer law it is built on — it stiffens as
 Hertz for thick films). `examples/model_comparison.py` overlays all four vs. the
 FEM across thicknesses.
 
+### Ingesting real AFM experiments
+
+`nanoindent.experiment` reads **raw instrument force curves**, calibrates them
+to force-indentation, and fits the modulus. An AFM records cantilever
+**deflection** vs. **piezo-Z**, so you supply the spring constant `k` (N/m) and,
+if the deflection is in volts, the sensitivity InvOLS (nm/V); the module handles
+baseline subtraction, contact-point detection, and the cantilever-compliance
+correction `δ = (Z−Z₀) − (d−d₀)`.
+
+Supported formats (dispatched by extension via `load_afm`):
+
+| format | extension | reader |
+|---|---|---|
+| JPK | `.jpk-force`, `.jpk` | `read_jpk` (ZIP: segment headers + channel data) |
+| Bruker / Veeco Nanoscope | `.spm`, `.pfc` | `read_bruker` (ASCII header + int16 data) |
+| Asylum Research | `.ibw` | `read_ibw` (Igor wave; needs `pip install igor2`) |
+| generic | `.csv`, `.txt`, `.tsv` | `read_csv` (Z, deflection columns) |
+
+```python
+from nanoindent import load_afm, analyze_experiment
+curve = load_afm("cell_force.jpk-force")          # or .spm / .ibw / .csv
+fit, (delta, force) = analyze_experiment(
+    curve, R=17.0, nu=0.5, h=7.0, model="dimitriadis_bonded")
+print(fit.E_fit)                                   # recovered modulus (MPa)
+```
+
+The whole path is validated by a synthetic round-trip: `synthetic_raw_curve`
+generates the `(Z, deflection)` an AFM would record at a known `E`, and
+`to_force_indentation` → `fit_modulus` recovers it (`examples/analyze_afm_experiment.py`
+— demo curve at E=130 MPa recovers ~125 MPa with Dimitriadis while naive Hertz
+reads ~250 MPa). Instrument readers target the documented layouts; the CSV path
+and calibration pipeline are backend-free and fully tested — verify the binary
+readers against your own exports.
+
 ### Synthetic data & inverse analysis (end-to-end double-check)
 
 `nanoindent.dataset` closes the loop: it generates a **realistic AFM force
@@ -370,12 +404,13 @@ src/nanoindent/
 ├── analytics.py    # Hertz; Dimitriadis 2002; Garcia 2018; Chadwick 2002; compare_models
 ├── convergence.py  # mesh / penalty / load-step studies
 ├── dataset.py      # synthetic AFM data + modulus-recovery inverse analysis
+├── experiment.py   # raw AFM ingestion (JPK/Bruker/Asylum/CSV) + calibration
 └── plotting.py     # publication-quality figures (vector output, CB-safe)
 examples/
-├── paper_reproduction.py
-├── hertz_validation.py
-├── synthetic_analysis.py
-└── publication_figure.py
+├── paper_reproduction.py       ├── model_comparison.py
+├── hertz_validation.py         ├── chadwick_verification.py
+├── synthetic_analysis.py       ├── field_heatmap.py
+├── analyze_afm_experiment.py   └── publication_figure.py
 tests/               # unit + physics-validation (slow) suites
 ```
 
