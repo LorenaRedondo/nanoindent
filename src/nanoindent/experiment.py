@@ -332,6 +332,144 @@ def read_jpk(
     )
 
 
+@dataclass
+class JPKForceMap:
+    """A JPK force-volume map: a grid of force curves plus calibration.
+
+    Attributes
+    ----------
+    curves:
+        List of :class:`ForceCurveData`, one per pixel (row-major).
+    n_rows, n_cols:
+        Grid dimensions (``n_rows * n_cols == len(curves)``).
+    spring_constant, inv_ols:
+        Cantilever spring constant (N/m) and deflection sensitivity (nm/V),
+        read from the file's calibration.
+    """
+
+    curves: list
+    n_rows: int
+    n_cols: int
+    spring_constant: Optional[float] = None
+    inv_ols: Optional[float] = None
+    source: Optional[str] = None
+
+    def __len__(self):
+        return len(self.curves)
+
+    def __getitem__(self, i):
+        return self.curves[i]
+
+
+def _jpk_lcd_convert(raw: np.ndarray, shared: dict, lcd_idx: int,
+                     target: Optional[str] = None) -> np.ndarray:
+    """Apply a JPK ``lcd-info`` calibration chain to raw channel samples.
+
+    Raw integers are mapped to the base unit (volts) by the encoder, then the
+    conversion set is walked from ``target`` back to the base slot, composing
+    the linear scalings. Returns values in the target slot's physical unit
+    (metres for distance/height, newtons for force).
+    """
+    p = f"lcd-info.{lcd_idx}"
+    enc_m = float(shared[f"{p}.encoder.scaling.multiplier"])
+    enc_o = float(shared[f"{p}.encoder.scaling.offset"])
+    base = raw * enc_m + enc_o                       # base slot (volts)
+
+    cset = f"{p}.conversion-set"
+    base_slot = shared.get(f"{cset}.conversions.base", "volts")
+    if target is None:
+        target = shared.get(f"{cset}.conversions.default", base_slot)
+    if target == base_slot:
+        return base
+
+    chain, slot, seen = [], target, set()
+    while slot != base_slot and slot not in seen:
+        seen.add(slot)
+        c = f"{cset}.conversion.{slot}"
+        m = float(shared[f"{c}.scaling.multiplier"])
+        o = float(shared[f"{c}.scaling.offset"])
+        chain.append((m, o))
+        slot = shared.get(f"{c}.base-calibration-slot", base_slot)
+    val = base
+    for m, o in reversed(chain):
+        val = val * m + o
+    return val
+
+
+def read_jpk_map(
+    path: str,
+    segment: int = 0,
+    height_channels=("height", "measuredHeight", "capacitiveSensorHeight"),
+    deflection_channel: str = "vDeflection",
+    max_curves: Optional[int] = None,
+) -> JPKForceMap:
+    """Read a JPK force-volume map (``.jpk-force-map``).
+
+    Parses the shared-data ``lcd-info`` calibration once, then decodes each
+    pixel's ``segment`` (0 = extend/approach) into a :class:`ForceCurveData`
+    with the piezo height (nm) and cantilever deflection (nm), and the spring
+    constant / sensitivity taken from the force/distance calibration.
+    """
+    import zipfile
+
+    with zipfile.ZipFile(path) as zf:
+        names = set(zf.namelist())
+        shared = _read_properties(zf, "shared-data/header.properties")
+
+        pix = sorted({int(n.split("/")[1]) for n in names
+                      if n.startswith("index/") and n.split("/")[1:2]
+                      and n.split("/")[1].isdigit()})
+        if max_curves:
+            pix = pix[:max_curves]
+
+        # Map channel name -> lcd-info index and target/spring constant from the
+        # first available segment header.
+        seg0 = f"index/{pix[0]}/segments/{segment}/"
+        hdr0 = _read_properties(zf, seg0 + "segment-header.properties")
+        chan_lcd = {}
+        for key, val in hdr0.items():
+            if key.startswith("channel.") and key.endswith(".lcd-info.*"):
+                chan_lcd[key.split(".")[1]] = int(val)
+
+        height_chan = next((c for c in height_channels if c in chan_lcd), None)
+        if height_chan is None or deflection_channel not in chan_lcd:
+            raise ValueError("JPK map missing height/deflection channels")
+        h_idx = chan_lcd[height_chan]
+        d_idx = chan_lcd[deflection_channel]
+
+        # spring constant (force conversion multiplier) and InvOLS (distance).
+        k = _first_float(shared,
+                         [f"lcd-info.{d_idx}.conversion-set.conversion.force"
+                          ".scaling.multiplier"])
+        invols_m = _first_float(shared,
+                                [f"lcd-info.{d_idx}.conversion-set.conversion"
+                                 ".distance.scaling.multiplier"])
+        inv_ols = invols_m * 1e9 if invols_m else None
+
+        curves = []
+        for i in pix:
+            seg = f"index/{i}/segments/{segment}/channels/"
+            hraw = seg + f"{height_chan}.dat"
+            draw = seg + f"{deflection_channel}.dat"
+            if hraw not in names or draw not in names:
+                continue
+            rh = np.frombuffer(zf.read(hraw), dtype=">i4").astype(float)
+            rd = np.frombuffer(zf.read(draw), dtype=">i4").astype(float)
+            z_m = _jpk_lcd_convert(rh, shared, h_idx, target="nominal")
+            defl_m = _jpk_lcd_convert(rd, shared, d_idx, target="distance")
+            curves.append(ForceCurveData(
+                z=z_m * 1e9, deflection=defl_m * 1e9, deflection_unit="nm",
+                spring_constant=k, inv_ols=inv_ols, segment="approach",
+                metadata={"pixel": i}, source=path, fmt="jpk-map",
+            ))
+
+    n = len(curves)
+    side = int(round(n ** 0.5))
+    n_rows, n_cols = (side, side) if side * side == n else (1, n)
+    return JPKForceMap(curves=curves, n_rows=n_rows, n_cols=n_cols,
+                       spring_constant=k, inv_ols=inv_ols, source=path)
+
+
 def read_bruker(
     path: str,
     z_sens_key: str = "@Sens. ZsensSens",

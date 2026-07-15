@@ -27,9 +27,10 @@ from . import dataset
 from .dataset import synthetic_force_curve, fit_modulus, SyntheticDataset, ModulusFit
 from . import experiment
 from .experiment import (
-    ForceCurveData, load_afm, read_csv, read_ibw, read_jpk, read_bruker,
-    analyze_experiment, synthetic_raw_curve,
+    ForceCurveData, load_afm, read_csv, read_ibw, read_jpk, read_jpk_map,
+    read_bruker, analyze_experiment, synthetic_raw_curve, JPKForceMap,
 )
+from . import slb
 from . import plotting
 
 __all__ = [
@@ -58,9 +59,12 @@ __all__ = [
     "read_csv",
     "read_ibw",
     "read_jpk",
+    "read_jpk_map",
     "read_bruker",
     "analyze_experiment",
     "synthetic_raw_curve",
+    "JPKForceMap",
+    "slb",
     "plotting",
     "synthetic_force_curve",
     "fit_modulus",
