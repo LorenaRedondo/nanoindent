@@ -100,6 +100,7 @@ python examples/hertz_validation.py             # thick-film Hertz check
 python examples/synthetic_analysis.py           # realistic dataset -> modulus recovery
 python examples/publication_figure.py           # journal-ready multi-panel figure (PDF/PNG/SVG)
 python examples/model_comparison.py              # Hertz/Garcia/Dimitriadis/Chadwick vs FEM
+python examples/chadwick_verification.py         # incompressible (nu=0.5) mixed FEM -> Chadwick
 ```
 
 ### Publication-quality figures
@@ -207,13 +208,39 @@ the convergence study as the arbiter. Vertical grading guarantees several
 element layers across even a 7 nm film, and quadratic (P2) displacement
 elements resolve bending and contact accurately with few elements.
 
-### Near-incompressibility
+### Near-incompressibility and the mixed formulation
 
-For `ν ≥ 0.45` the P2 displacement formulation starts to lock; the config emits
-a warning. A bonded near-incompressible film is physically much stiffer than
-`ν = 0.3`, so a mixed (Taylor–Hood) displacement–pressure formulation is the
-natural v2 extension. `ν = 0.5` exactly is not supported by the displacement
-formulation.
+For `ν ≥ 0.45` the single-field ("primal") P2 displacement formulation locks
+and over-stiffens. Set `formulation="mixed"` for a **Taylor–Hood** (P2
+displacement / P1 pressure) two-field formulation that is locking-free and
+supports fully incompressible **`ν = 0.5`** exactly:
+
+```python
+SimulationConfig(nu=0.5, formulation="mixed", tip_shape="paraboloid", ...)
+```
+
+The mixed solve assembles the block system
+
+```
+[ A + K_contact   Bᵀ ] [u]   [f_contact]
+[ B              −C   ] [p] = [   0     ]
+```
+
+with `A(u,v)=∫2μ ε:ε r`, `B(u,q)=∫(∇·u) q r`, `C(p,q)=∫(1/λ) p q r` (→ 0 at
+`ν=½`), Newton-iterated over the contact active set. It reproduces the primal
+result at `ν=0.3` (agreement < 0.5%).
+
+**Verifying Chadwick.** Because it handles `ν = ½`, the mixed formulation lets
+us check the Chadwick 2002 thin-incompressible-layer law directly. Sweeping the
+thin-film parameter `χ = √(Rδ)/h`, the incompressible FEM force converges to
+`F=(2π/3)E R²δ³/h³` as `χ` grows — recovering both the scaling and the
+coefficient (`examples/chadwick_verification.py`):
+
+![chadwick verification](docs/chadwick_verification.png)
+
+| χ_max | 1.4 | 2.9 | 4.8 | 8.3 |
+|---|---|---|---|---|
+| F_FEM / F_Chadwick | 2.90 | 1.46 | 1.16 | 0.95 |
 
 ---
 

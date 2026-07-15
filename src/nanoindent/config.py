@@ -97,6 +97,13 @@ class SimulationConfig:
     """Displacement element order.  2 (P2) is strongly recommended for
     contact accuracy and bending across a thin film."""
 
+    formulation: str = "primal"
+    """Elasticity formulation: ``"primal"`` (single-field P2 displacement,
+    default) or ``"mixed"`` (Taylor-Hood P2 displacement / P1 pressure).  The
+    mixed formulation is locking-free and supports fully incompressible
+    ``nu = 0.5`` (needed to verify the Chadwick thin-incompressible-layer
+    limit); use it whenever ``nu >= 0.45``."""
+
     # -- contact -----------------------------------------------------------
     penalty_alpha: float = 100.0
     """Dimensionless penalty factor.  Local penalty stiffness is
@@ -137,19 +144,29 @@ class SimulationConfig:
             if not (value > 0):
                 raise ValueError(f"{name} must be > 0, got {value!r}")
 
-        if not (-1.0 < self.nu < 0.5):
-            raise ValueError(
-                f"nu must be in (-1, 0.5), got {self.nu!r}. "
-                "nu = 0.5 (fully incompressible) is not supported by the "
-                "displacement formulation."
-            )
-        if self.nu >= 0.45:
-            warnings.warn(
-                f"nu = {self.nu} is near-incompressible; P2 displacement "
-                "elements may lock and over-stiffen the response. Treat "
-                "results with caution (design doc section 5.3).",
-                stacklevel=2,
-            )
+        mixed = str(self.formulation).strip().lower() == "mixed"
+        if mixed:
+            # Taylor-Hood supports full incompressibility.
+            if not (-1.0 < self.nu <= 0.5):
+                raise ValueError(
+                    f"nu must be in (-1, 0.5] for the mixed formulation, "
+                    f"got {self.nu!r}"
+                )
+        else:
+            if not (-1.0 < self.nu < 0.5):
+                raise ValueError(
+                    f"nu must be in (-1, 0.5), got {self.nu!r}. "
+                    "nu = 0.5 (fully incompressible) needs formulation='mixed'."
+                )
+            if self.nu >= 0.45:
+                warnings.warn(
+                    f"nu = {self.nu} is near-incompressible; the primal P2 "
+                    "formulation may lock and over-stiffen. Use "
+                    "formulation='mixed' (design doc section 5.3).",
+                    stacklevel=2,
+                )
+        if self.formulation not in ("primal", "mixed"):
+            raise ValueError("formulation must be 'primal' or 'mixed'")
 
         if self.n_steps < 1:
             raise ValueError(f"n_steps must be >= 1, got {self.n_steps}")

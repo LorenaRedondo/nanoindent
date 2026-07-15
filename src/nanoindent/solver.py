@@ -56,27 +56,84 @@ class IndentationSolver:
     def __init__(self, cfg: SimulationConfig, verbose: bool = False) -> None:
         self.cfg = cfg
         self.verbose = verbose
-        self.material = LinearElastic(cfg.E, cfg.nu)
+        self.mixed = str(cfg.formulation).strip().lower() == "mixed"
+        # Shear modulus is well defined at nu = 0.5; the primal constitutive
+        # matrix (which needs lambda) is only built when not mixed.
+        self._mu = cfg.E / (2.0 * (1.0 + cfg.nu))
+        self.material = None if self.mixed else LinearElastic(cfg.E, cfg.nu)
         self.tip = make_tip(cfg)
 
         self.domain: Optional[Domain] = None
         self.basis: Optional[Basis] = None
+        self.basis_p: Optional[Basis] = None
         self._K = None
+        self._A = self._B = self._C = None
         self._dirichlet = None
 
     # -- setup -------------------------------------------------------------
     def setup(self) -> None:
-        """Build the mesh, function space, elastic stiffness, and BC dofs."""
+        """Build the mesh, function space(s), operators, and BC dofs."""
         self.domain = build_mesh(self.cfg)
         mesh = self.domain.mesh
         elem = ElementVector(
             ElementTriP2() if self.cfg.element_order == 2 else ElementTriP1()
         )
-        self.basis = Basis(mesh, elem)
-
-        C = self.material.constitutive_matrix()
-        self._K = self._assemble_stiffness(self.basis, C)
+        if self.mixed:
+            # Taylor-Hood: P2 displacement, P1 pressure, shared quadrature.
+            self.basis = Basis(mesh, elem, intorder=4)
+            self.basis_p = Basis(mesh, ElementTriP1(), intorder=4)
+            self._assemble_mixed_blocks()
+        else:
+            self.basis = Basis(mesh, elem)
+            C = self.material.constitutive_matrix()
+            self._K = self._assemble_stiffness(self.basis, C)
         self._dirichlet = self._dirichlet_dofs(self.basis)
+
+    def _assemble_mixed_blocks(self) -> None:
+        """Assemble the constant (u,p) Taylor-Hood blocks A, B, C.
+
+        System per Newton step::
+
+            [ A + Kc   B^T ] [du]   = -[ A u + B^T p + Rc ]
+            [ B       -C   ] [dp]      [ B u - C p        ]
+
+        with ``A(u,v)=int 2 mu eps(u):eps(v) r``, ``B(u,q)=int (div u) q r`` and
+        ``C(p,q)=int (1/lambda) p q r`` (C = 0 for nu = 0.5).
+        """
+        mu = self._mu
+        nu = self.cfg.nu
+        inv_lambda = 0.0 if nu >= 0.5 - 1e-12 else 1.0 / self.material_lambda()
+
+        @BilinearForm
+        def A_form(u, v, w):
+            r = w.x[0]
+            e_rr = u.grad[0][0]; e_zz = u.grad[1][1]
+            e_tt = u[0] / r;     g_rz = u.grad[0][1] + u.grad[1][0]
+            f_rr = v.grad[0][0]; f_zz = v.grad[1][1]
+            f_tt = v[0] / r;     g_rz_v = v.grad[0][1] + v.grad[1][0]
+            # 2 mu eps:eps ; eps:eps uses 1/2 on the engineering shear product
+            return 2 * mu * (e_rr * f_rr + e_zz * f_zz + e_tt * f_tt
+                             + 0.5 * g_rz * g_rz_v) * r
+
+        @BilinearForm
+        def B_form(u, q, w):        # trial u (vector), test q (scalar)
+            r = w.x[0]
+            div_u = u.grad[0][0] + u.grad[1][1] + u[0] / r
+            return div_u * q * r
+
+        @BilinearForm
+        def C_form(p, q, w):
+            r = w.x[0]
+            return inv_lambda * p * q * r
+
+        self._A = A_form.assemble(self.basis)
+        self._B = B_form.assemble(self.basis, self.basis_p)
+        self._C = C_form.assemble(self.basis_p)
+
+    def material_lambda(self) -> float:
+        """First Lame parameter (only used by the mixed C block for nu<0.5)."""
+        nu, E = self.cfg.nu, self.cfg.E
+        return E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
 
     def _dirichlet_dofs(self, basis: Basis) -> np.ndarray:
         # Bottom bonded: u_r = u_z = 0.  Axis: u_r = 0 (u^1 is the r-component).
@@ -156,9 +213,12 @@ class IndentationSolver:
     def solve_step(self, u0: np.ndarray, delta: float, fb: FacetBasis):
         """Active-set Newton solve for one indentation depth.
 
-        Residual: ``F(u) = K u + R_contact(u) = 0`` with homogeneous Dirichlet
-        constraints.  Returns the converged displacement vector.
+        Primal residual ``K u + R_contact(u) = 0``; mixed residual is the
+        Taylor-Hood block system (see :meth:`_assemble_mixed_blocks`).  Returns
+        the converged displacement vector (pressure is stored in ``self._p``).
         """
+        if self.mixed:
+            return self._solve_step_mixed(u0, delta, fb)
         cfg = self.cfg
         K = self._K
         D = self._dirichlet
@@ -190,6 +250,49 @@ class IndentationSolver:
             )
         return u
 
+    def _solve_step_mixed(self, u0: np.ndarray, delta: float, fb: FacetBasis):
+        """Active-set Newton on the coupled (u, p) Taylor-Hood system."""
+        from scipy.sparse import bmat
+
+        cfg = self.cfg
+        Nu, Np = self.basis.N, self.basis_p.N
+        A, B, C = self._A, self._B, self._C
+        D = self._dirichlet            # displacement dofs only
+        u = u0.copy()
+        p = self._p.copy() if getattr(self, "_p", None) is not None \
+            else np.zeros(Np)
+
+        r0 = None
+        for it in range(cfg.newton_max_it):
+            Rc, Kc = self._contact_forms(fb, u, delta)
+            # Residual blocks
+            res_u = A @ u + B.T @ p + Rc
+            res_p = B @ u - C @ p
+            residual = np.concatenate([res_u, res_p])
+            J = bmat([[A + Kc, B.T], [B, -C]], format="csr")
+
+            dx = solve(*condense(J, -residual, D=D))
+            u = u + dx[:Nu]
+            p = p + dx[Nu:]
+
+            free = np.ones(Nu + Np, dtype=bool)
+            free[D] = False
+            rnorm = np.linalg.norm(residual[free])
+            if r0 is None:
+                r0 = max(rnorm, 1e-30)
+            dnorm = np.linalg.norm(dx)
+            if self.verbose:
+                print(f"    [mixed] it={it:2d} |R|={rnorm:.3e} |dx|={dnorm:.3e}")
+            if rnorm <= cfg.newton_rtol * r0 or dnorm < 1e-12:
+                break
+        else:
+            warnings.warn(
+                f"Newton (mixed) did not converge at delta={delta:.4f} nm "
+                f"(|R|/|R0|={rnorm / r0:.2e})", stacklevel=2,
+            )
+        self._p = p
+        return u
+
     def _free_mask(self) -> np.ndarray:
         mask = np.ones(self.basis.N, dtype=bool)
         mask[self._dirichlet] = False
@@ -218,26 +321,47 @@ class IndentationSolver:
     def _bottom_force(self, u: np.ndarray) -> float:
         """Vertical reaction over the bonded bottom (pN), equilibrium check.
 
-        Total vertical reaction = 2*pi * integral sig_zz(z=0) r dr.
+        Total vertical reaction = 2*pi * integral sig_zz(z=0) r dr.  In the
+        mixed formulation sig_zz = 2 mu eps_zz + p (the pressure carries the
+        volumetric stress); in the primal formulation it is the full C row.
         """
-        cfg = self.cfg
-        C = self.material.constitutive_matrix()
-        fb = FacetBasis(self.domain.mesh, self.basis.elem, facets="bottom")
+        # In mixed mode the u and p facet bases must share quadrature.
+        io = 4 if self.mixed else None
+        fb = FacetBasis(self.domain.mesh, self.basis.elem, facets="bottom",
+                        intorder=io)
         uh = fb.interpolate(u)
 
-        @Functional
-        def integ(w):
-            r = w.x[0]
-            e_rr = w["u"].grad[0][0]
-            e_zz = w["u"].grad[1][1]
-            e_tt = w["u"][0] / r
-            s_zz = C[1, 0] * e_rr + C[1, 1] * e_zz + C[1, 2] * e_tt
-            return s_zz * r
+        if self.mixed:
+            mu = self._mu
+            fb_p = FacetBasis(self.domain.mesh, self.basis_p.elem,
+                              facets="bottom", intorder=io)
+            ph = fb_p.interpolate(self._p)
+
+            @Functional
+            def integ(w):
+                r = w.x[0]
+                e_zz = w["u"].grad[1][1]
+                s_zz = 2.0 * mu * e_zz + w["p"]
+                return s_zz * r
+
+            val = integ.assemble(fb, u=uh, p=ph)
+        else:
+            C = self.material.constitutive_matrix()
+
+            @Functional
+            def integ(w):
+                r = w.x[0]
+                e_rr = w["u"].grad[0][0]
+                e_zz = w["u"].grad[1][1]
+                e_tt = w["u"][0] / r
+                s_zz = C[1, 0] * e_rr + C[1, 1] * e_zz + C[1, 2] * e_tt
+                return s_zz * r
+
+            val = integ.assemble(fb, u=uh)
 
         # The substrate reaction on the sample is the traction t_z = -sig_zz
         # integrated over the bottom (outward normal -z), giving a positive
         # force that balances the downward contact pressure.
-        val = integ.assemble(fb, u=uh)
         return -2.0 * np.pi * float(val)
 
     def _contact_radius(self, fb: FacetBasis, u: np.ndarray, delta: float) -> float:
@@ -272,6 +396,8 @@ class IndentationSolver:
         maxpen = np.zeros(n)
 
         u = np.zeros(self.basis.N)
+        if self.mixed:
+            self._p = np.zeros(self.basis_p.N)
         for i, delta in enumerate(deltas):
             if delta == 0.0:
                 continue
