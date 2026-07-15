@@ -110,6 +110,37 @@ def test_nodal_field_and_heatmap(tmp_path):
     assert os.path.exists(paths[0])
 
 
+def test_animate_field_writes_gif(tmp_path):
+    import warnings
+    from nanoindent import IndentationSolver
+    cfg = SimulationConfig(h=14.0, L=40.0, nu=0.3, n_steps=3, delta_max=1.0,
+                           mesh_size_contact=0.7, mesh_size_edge=10.0,
+                           penalty_alpha=300.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        solver = IndentationSolver(cfg)
+        solver.run(store_history=True)
+    assert len(solver.history) == 3
+    out = tmp_path / "vm.gif"        # .gif -> pillow writer, no ffmpeg needed
+    path = plotting.animate_field(solver, field="von_mises", path=str(out),
+                                  fps=4, dpi=60)
+    import os
+    assert os.path.exists(path) and os.path.getsize(path) > 0
+
+
+def test_animate_field_requires_history():
+    from nanoindent import IndentationSolver
+    import warnings
+    cfg = SimulationConfig(h=14.0, L=40.0, nu=0.3, n_steps=2, delta_max=1.0,
+                           mesh_size_contact=0.8, mesh_size_edge=10.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        solver = IndentationSolver(cfg)
+        solver.run()                 # no store_history
+    with pytest.raises(RuntimeError):
+        plotting.animate_field(solver, path="x.gif")
+
+
 def test_save_figure_writes_files(tmp_path):
     curves = {7.0: _fake_curve(7.0)}
     fig = plotting.plot_force_curves(curves, compare=["hertz"])
