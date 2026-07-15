@@ -37,7 +37,7 @@ from skfem import (
 from .config import SimulationConfig
 from .material import LinearElastic
 from .geometry import build_mesh, Domain
-from .contact import RigidSphere, penalty_stiffness
+from .contact import make_tip, penalty_stiffness
 from .postproc import ForceCurve
 from . import analytics
 
@@ -57,7 +57,7 @@ class IndentationSolver:
         self.cfg = cfg
         self.verbose = verbose
         self.material = LinearElastic(cfg.E, cfg.nu)
-        self.sphere = RigidSphere(cfg.R, cfg.h)
+        self.tip = make_tip(cfg)
 
         self.domain: Optional[Domain] = None
         self.basis: Optional[Basis] = None
@@ -116,7 +116,7 @@ class IndentationSolver:
         """Return (residual_vector, tangent_matrix) for the penalty contact at
         displacement ``u`` and indentation ``delta``."""
         cfg = self.cfg
-        sphere = self.sphere
+        tip = self.tip
 
         # Interpolate current vertical displacement at facet quadrature points
         # to evaluate the penetration and the active set there.
@@ -127,12 +127,10 @@ class IndentationSolver:
             r = w.x[0]
             uz = w["uz"]
             k_pen = penalty_stiffness(cfg.penalty_alpha, cfg.E, w.h)
-            # penetration = (h + uz) - z_sphere(r); active where > 0 and r < R
-            z_sphere = sphere.center_z(delta) - np.sqrt(
-                np.maximum(sphere.R ** 2 - r ** 2, 0.0)
-            )
-            pen = (sphere.h + uz) - z_sphere
-            pen = np.where(r < sphere.R, pen, -np.inf)
+            # penetration = (h + uz) - z_tip(r); z_tip is +inf where the tip
+            # cannot contact, so pen -> -inf -> pen_pos = 0 there.
+            z_tip = tip.surface_z(r, delta)
+            pen = (tip.h + uz) - z_tip
             pen_pos = np.maximum(pen, 0.0)
             # contact pressure pushes the surface down: force on the test
             # function's z-component is -k_pen*pen (traction), but the reaction
@@ -145,11 +143,9 @@ class IndentationSolver:
             r = w.x[0]
             uz = w["uz"]
             k_pen = penalty_stiffness(cfg.penalty_alpha, cfg.E, w.h)
-            z_sphere = sphere.center_z(delta) - np.sqrt(
-                np.maximum(sphere.R ** 2 - r ** 2, 0.0)
-            )
-            pen = (sphere.h + uz) - z_sphere
-            active = ((pen > 0.0) & (r < sphere.R)).astype(float)
+            z_tip = tip.surface_z(r, delta)
+            pen = (tip.h + uz) - z_tip
+            active = (pen > 0.0).astype(float)
             return k_pen * active * u_[1] * v_[1] * r
 
         Rc = residual.assemble(fb, uz=uh[1])
@@ -203,7 +199,7 @@ class IndentationSolver:
     def _contact_force(self, fb: FacetBasis, u: np.ndarray, delta: float) -> float:
         """Total reaction force (pN) = 2*pi * integral k_pen [-g]_+ r dr."""
         cfg = self.cfg
-        sphere = self.sphere
+        tip = self.tip
         uh = fb.interpolate(u)
 
         @Functional
@@ -211,12 +207,9 @@ class IndentationSolver:
             r = w.x[0]
             uz = w["uz"]
             k_pen = penalty_stiffness(cfg.penalty_alpha, cfg.E, w.h)
-            z_sphere = sphere.center_z(delta) - np.sqrt(
-                np.maximum(sphere.R ** 2 - r ** 2, 0.0)
-            )
-            pen = (sphere.h + uz) - z_sphere
-            pen = np.where(r < sphere.R, pen, 0.0)
-            pen_pos = np.maximum(pen, 0.0)
+            z_tip = tip.surface_z(r, delta)
+            pen = (tip.h + uz) - z_tip
+            pen_pos = np.maximum(np.where(np.isfinite(pen), pen, 0.0), 0.0)
             return k_pen * pen_pos * r
 
         val = integ.assemble(fb, uz=uh[1])
@@ -249,24 +242,17 @@ class IndentationSolver:
 
     def _contact_radius(self, fb: FacetBasis, u: np.ndarray, delta: float) -> float:
         """Largest radius still in contact (nm), from facet quadrature points."""
-        sphere = self.sphere
         uh = fb.interpolate(u)
         r = fb.global_coordinates()[0]
-        uz = uh[1]
-        z_sphere = sphere.center_z(delta) - np.sqrt(
-            np.maximum(sphere.R ** 2 - r ** 2, 0.0)
-        )
-        pen = np.where(r < sphere.R, (sphere.h + uz) - z_sphere, -np.inf)
-        active = pen > 0.0
+        active = self.tip.is_active(r, uh[1], delta)
         if not np.any(active):
             return 0.0
         return float(np.max(r[active]))
 
     def _max_penetration(self, fb: FacetBasis, u: np.ndarray, delta: float) -> float:
-        sphere = self.sphere
         uh = fb.interpolate(u)
         r = fb.global_coordinates()[0]
-        pen = sphere.penetration(r, uh[1], delta)
+        pen = self.tip.penetration(r, uh[1], delta)
         pen = pen[np.isfinite(pen)]
         return float(np.max(pen)) if pen.size else 0.0
 

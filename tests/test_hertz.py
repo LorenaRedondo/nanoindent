@@ -68,6 +68,29 @@ def test_thinner_film_is_stiffer():
     assert c7.force[-1] > c14.force[-1]
 
 
+def test_cone_recovers_sneddon_thick_film():
+    # A sharp cone on a thick film should follow Sneddon's F ~ delta^2 law.
+    curve, cfg = _run(tip_shape="cone", tip_half_angle_deg=70.3,
+                      h=200.0, L=200.0, nu=0.3, n_steps=8, delta_max=1.0,
+                      mesh_size_contact=0.3, mesh_size_edge=12.0,
+                      penalty_alpha=400.0)
+    sned = analytics.sneddon_cone_force(curve.delta, 70.3, cfg.E, cfg.nu)
+    mask = curve.delta >= 0.5
+    rel = np.abs(curve.force[mask] - sned[mask]) / sned[mask]
+    assert np.mean(rel) < 0.05
+
+
+def test_paraboloid_recovers_hertz_thick_film():
+    curve, cfg = _run(tip_shape="paraboloid", R=17.0,
+                      h=200.0, L=200.0, nu=0.3, n_steps=8, delta_max=1.0,
+                      mesh_size_contact=0.35, mesh_size_edge=12.0,
+                      penalty_alpha=400.0)
+    fh = analytics.hertz_force(curve.delta, cfg.R, cfg.E, cfg.nu)
+    mask = curve.delta >= 0.5
+    ratio = curve.force[mask] / fh[mask]
+    assert abs(np.mean(ratio) - 1.0) < 0.03
+
+
 def test_contact_radius_thick_film():
     curve, cfg = _run(h=200.0, L=200.0, nu=0.3, n_steps=6, delta_max=1.0,
                       mesh_size_contact=0.3, mesh_size_edge=12.0,

@@ -50,6 +50,22 @@ def test_incompressible_tabulated_coefficients():
     assert F == pytest.approx(expected, rel=1e-4)
 
 
+def test_sneddon_cone_scaling():
+    # F ~ delta^2 for a cone; doubling delta quadruples F.
+    F = analytics.sneddon_cone_force(np.array([0.5, 1.0]), 70.3, 130.0, 0.3)
+    assert F[1] / F[0] == pytest.approx(4.0, rel=1e-9)
+    Estar = 130.0 / (1 - 0.3 ** 2)
+    expected = (2 / np.pi) * Estar * np.tan(np.deg2rad(70.3)) * 1.0 ** 2
+    assert F[1] == pytest.approx(expected)
+
+
+def test_paraboloid_equals_hertz():
+    d = np.array([0.3, 0.7])
+    assert np.allclose(
+        analytics.paraboloid_force(d, 17.0, 130.0, 0.3),
+        analytics.hertz_force(d, 17.0, 130.0, 0.3))
+
+
 def test_contact_radius_hertz():
     a = analytics.contact_radius_hertz(np.array([1.0, 4.0]), 17.0)
     assert a[0] == pytest.approx(np.sqrt(17.0))

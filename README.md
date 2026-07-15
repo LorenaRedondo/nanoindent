@@ -129,6 +129,38 @@ and the `SINGLE_COLUMN` / `DOUBLE_COLUMN` width constants.
 
 ---
 
+## Indenter geometry
+
+The indenter shape is a configuration parameter. Because the model is **2D
+axisymmetric**, the tip must be a surface of revolution — four exact shapes are
+built in:
+
+| `tip_shape` | parameters | analytic benchmark |
+|---|---|---|
+| `"sphere"` (default) | `R` | Hertz |
+| `"paraboloid"` | `R` | Hertz (parabolic tip) |
+| `"cone"` | `tip_half_angle_deg` **or** `tip_pyramid` | Sneddon `F=(2/π)E*tanθ·δ²` |
+| `"blunted_cone"` | `R`, `tip_half_angle_deg`/`tip_pyramid` | sphere→cone crossover |
+
+```python
+SimulationConfig(tip_shape="cone", tip_half_angle_deg=70.3)
+SimulationConfig(tip_shape="blunted_cone", R=17.0, tip_half_angle_deg=35.0)
+```
+
+**Pyramids** (Berkovich, Vickers, cube-corner) are *not* axisymmetric and
+cannot be meshed directly in this model. The standard workaround — an
+**equivalent cone** with a half-angle reproducing the same projected-area-vs-
+depth law — is built in:
+
+```python
+SimulationConfig(tip_shape="cone", tip_pyramid="berkovich")   # 70.3° equiv. cone
+```
+
+Each shape is validated against its analytic law in the thick-film limit
+(sphere/paraboloid → Hertz, cone → Sneddon, all within a few percent). A sharp
+cone reproduces its δ² force law; the blunted cone reduces to the sphere while
+contact stays on the spherical cap and stiffens toward the cone beyond it.
+
 ## Units
 
 A single consistent system is used everywhere:
@@ -250,7 +282,7 @@ src/nanoindent/
 ├── config.py       # SimulationConfig dataclass (validated; units nm/MPa/pN)
 ├── geometry.py     # graded axisymmetric mesh + boundary tags
 ├── material.py     # LinearElastic: Lame params, axisym constitutive matrix
-├── contact.py      # RigidSphere: exact gap, penetration, penalty stiffness
+├── contact.py      # tip zoo (sphere/paraboloid/cone/blunted): gap, penalty
 ├── solver.py       # IndentationSolver: assembly, Newton, reaction extraction
 ├── postproc.py     # ForceCurve: CSV IO, diagnostics, plotting
 ├── analytics.py    # Hertz; Dimitriadis 2002; Garcia & Garcia 2018 BEC

@@ -13,7 +13,10 @@ Quick start
 
 from .config import SimulationConfig, MPA_NM2_TO_PN
 from .material import LinearElastic
-from .contact import RigidSphere
+from .contact import (
+    RigidIndenter, RigidSphere, Paraboloid, Cone, BluntedCone,
+    make_tip, equivalent_cone_half_angle,
+)
 from .geometry import build_mesh, Domain
 from .solver import IndentationSolver
 from .postproc import ForceCurve
@@ -27,7 +30,13 @@ __all__ = [
     "SimulationConfig",
     "MPA_NM2_TO_PN",
     "LinearElastic",
+    "RigidIndenter",
     "RigidSphere",
+    "Paraboloid",
+    "Cone",
+    "BluntedCone",
+    "make_tip",
+    "equivalent_cone_half_angle",
     "build_mesh",
     "Domain",
     "IndentationSolver",

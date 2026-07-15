@@ -39,9 +39,26 @@ class SimulationConfig:
     the solver code.  Values are validated in :meth:`__post_init__`.
     """
 
+    # -- indenter ----------------------------------------------------------
+    tip_shape: str = "sphere"
+    """Indenter geometry (axisymmetric): ``"sphere"``, ``"paraboloid"``,
+    ``"cone"`` or ``"blunted_cone"``.  Pyramids (Berkovich, Vickers,
+    cube-corner) are non-axisymmetric — use a ``cone`` with ``tip_pyramid``
+    set to the equivalent cone (see ``contact.equivalent_cone_half_angle``)."""
+
+    tip_half_angle_deg: Optional[float] = None
+    """Cone half-angle from the axis (deg), required for ``cone`` /
+    ``blunted_cone`` unless ``tip_pyramid`` is given."""
+
+    tip_pyramid: Optional[str] = None
+    """If set (``"berkovich"``, ``"vickers"``, ``"cube_corner"``), a
+    ``cone`` / ``blunted_cone`` tip uses the matching equivalent-cone
+    half-angle instead of ``tip_half_angle_deg``."""
+
     # -- geometry (nm) -----------------------------------------------------
     R: float = 17.0
-    """Tip radius (nm).  Rigid sphere, never meshed."""
+    """Tip radius (nm).  Used by sphere / paraboloid / blunted_cone; ignored by
+    a sharp cone.  The rigid tip is never meshed."""
 
     h: float = 7.0
     """Film thickness (nm)."""
@@ -138,11 +155,31 @@ class SimulationConfig:
             raise ValueError(f"n_steps must be >= 1, got {self.n_steps}")
         if self.element_order not in (1, 2):
             raise ValueError("element_order must be 1 or 2")
-        if self.delta_max >= self.R:
+
+        # -- indenter --------------------------------------------------------
+        shape = str(self.tip_shape).strip().lower()
+        valid_shapes = {"sphere", "paraboloid", "cone", "blunted_cone"}
+        if shape not in valid_shapes:
+            raise ValueError(
+                f"tip_shape must be one of {sorted(valid_shapes)}, "
+                f"got {self.tip_shape!r}"
+            )
+        # Sphere/blunted_cone use an exact spherical cap: delta_max must stay
+        # within the sphere (contact radius < R).
+        if shape in ("sphere", "blunted_cone") and self.delta_max >= self.R:
             raise ValueError(
                 "delta_max must be < R for the spherical gap function to be "
                 f"well defined, got delta_max={self.delta_max}, R={self.R}"
             )
+        if shape in ("cone", "blunted_cone"):
+            if self.tip_pyramid is None and self.tip_half_angle_deg is None:
+                raise ValueError(
+                    f"tip_shape={shape!r} requires tip_half_angle_deg or "
+                    "tip_pyramid"
+                )
+            if (self.tip_half_angle_deg is not None
+                    and not (0.0 < self.tip_half_angle_deg < 90.0)):
+                raise ValueError("tip_half_angle_deg must be in (0, 90)")
         if self.mesh_size_edge < self.mesh_size_contact:
             raise ValueError(
                 "mesh_size_edge must be >= mesh_size_contact "

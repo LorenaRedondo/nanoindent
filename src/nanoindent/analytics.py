@@ -125,6 +125,29 @@ def garcia_bec_force(delta, R: float, E: float, nu: float, h: float) -> np.ndarr
     return hertz_force(delta, R, E, nu) * poly
 
 
+def paraboloid_force(delta, R: float, E: float, nu: float) -> np.ndarray:
+    """Force for a paraboloidal tip on a half-space.
+
+    Identical to :func:`hertz_force` (Hertz's sphere law is the paraboloid
+    result in the small-strain limit); provided as an explicitly named model.
+    """
+    return hertz_force(delta, R, E, nu)
+
+
+def sneddon_cone_force(delta, half_angle_deg: float, E: float,
+                       nu: float) -> np.ndarray:
+    """Sneddon force for a rigid cone on an elastic half-space.
+
+    ``F = (2/pi) * E_star * tan(theta) * delta**2`` where ``theta`` is the cone
+    half-angle measured from the indentation axis and ``E_star = E/(1-nu^2)``.
+    Returns pN for delta in nm, E in MPa.
+    """
+    delta = np.asarray(delta, dtype=float)
+    E_star = E / (1.0 - nu ** 2)
+    theta = np.deg2rad(half_angle_deg)
+    return (2.0 / np.pi) * E_star * np.tan(theta) * np.clip(delta, 0.0, None) ** 2
+
+
 def contact_radius_hertz(delta, R: float) -> np.ndarray:
     """Hertz contact radius ``a = sqrt(R*delta)`` (nm)."""
     delta = np.asarray(delta, dtype=float)
