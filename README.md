@@ -1,5 +1,7 @@
 # nanoindent
 
+[![CI](https://github.com/alpibrusl/afm-finite-elements/actions/workflows/ci.yml/badge.svg)](https://github.com/alpibrusl/afm-finite-elements/actions/workflows/ci.yml)
+
 FEM simulation of **AFM nanoindentation of thin elastic films** by a rigid
 spherical tip. An open-source Python replacement for a COMSOL setup: a rigid
 sphere (R = 17 nm) indenting a linear-elastic film (E = 130 MPa, thickness
@@ -91,6 +93,7 @@ Reproduce both paper thicknesses with one command:
 ```bash
 python examples/paper_reproduction.py           # writes results/{h7,h14}.csv + PNGs
 python examples/hertz_validation.py             # thick-film Hertz check
+python examples/synthetic_analysis.py           # realistic dataset -> modulus recovery
 ```
 
 ---
@@ -162,6 +165,38 @@ convergence.penalty_study(cfg)     # alpha sweep; F plateaus, interpenetration -
 convergence.load_step_study(cfg)   # n_steps sweep; elastic => path-independent
 ```
 
+### Synthetic data & inverse analysis (end-to-end double-check)
+
+`nanoindent.dataset` closes the loop: it generates a **realistic AFM force
+curve** (measurement noise, baseline offset, unknown contact point) from a
+ground-truth source — including the FEM itself — and then **fits the modulus
+back out** with a chosen contact model, contact-point determination included.
+
+```python
+from nanoindent import SimulationConfig, synthetic_force_curve, fit_modulus
+cfg = SimulationConfig(h=7.0, E=130.0)
+ds = synthetic_force_curve(cfg, source="dimitriadis", noise_pN=10.0)
+naive  = fit_modulus(ds.delta, ds.force, "hertz",       cfg.R, cfg.nu, cfg.h, fit_contact_point=True)
+bec    = fit_modulus(ds.delta, ds.force, "dimitriadis", cfg.R, cfg.nu, cfg.h, fit_contact_point=True)
+print(naive.E_fit, bec.E_fit)   # ~267 MPa vs ~130 MPa
+```
+
+Running `examples/synthetic_analysis.py` (ground truth **E = 130 MPa**, data
+generated from the **FEM**, ~10 pN noise) demonstrates the bottom-effect
+artefact and its correction:
+
+| h (nm) | Hertz fit E | Dimitriadis fit E |
+|-------:|------------:|------------------:|
+|   7    | 267 MPa (**+106 %**) | 134 MPa (+3 %) |
+|  14    | 182 MPa (**+40 %**)  | 130 MPa (−0 %) |
+| 200    | 131 MPa (+0 %)       | 128 MPa (−1 %) |
+
+The naive Hertz fit dramatically over-estimates the modulus on thin bonded
+films (and correctly agrees with Hertz for the 200 nm half-space, an
+independent check on the solver), while the Dimitriadis bonded correction
+recovers the true modulus at every thickness — confirming the forward FEM and
+the analytic corrections are mutually consistent.
+
 Physics-validation tests (pytest `-m slow`) check:
 
 1. **Hertz limit** — a 200 nm film recovers `F = (4/3) E* √R δ^{3/2}` within 2%.
@@ -188,10 +223,12 @@ src/nanoindent/
 ├── solver.py       # IndentationSolver: assembly, Newton, reaction extraction
 ├── postproc.py     # ForceCurve: CSV IO, diagnostics, plotting
 ├── analytics.py    # Hertz; Dimitriadis 2002; Garcia & Garcia 2018 BEC
-└── convergence.py  # mesh / penalty / load-step studies
+├── convergence.py  # mesh / penalty / load-step studies
+└── dataset.py      # synthetic AFM data + modulus-recovery inverse analysis
 examples/
 ├── paper_reproduction.py
-└── hertz_validation.py
+├── hertz_validation.py
+└── synthetic_analysis.py
 tests/               # unit + physics-validation (slow) suites
 ```
 

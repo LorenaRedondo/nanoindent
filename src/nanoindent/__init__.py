@@ -19,6 +19,8 @@ from .solver import IndentationSolver
 from .postproc import ForceCurve
 from . import analytics
 from . import convergence
+from . import dataset
+from .dataset import synthetic_force_curve, fit_modulus, SyntheticDataset, ModulusFit
 
 __all__ = [
     "SimulationConfig",
@@ -31,6 +33,11 @@ __all__ = [
     "ForceCurve",
     "analytics",
     "convergence",
+    "dataset",
+    "synthetic_force_curve",
+    "fit_modulus",
+    "SyntheticDataset",
+    "ModulusFit",
 ]
 
 __version__ = "0.1.0"
