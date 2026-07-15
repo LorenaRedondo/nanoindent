@@ -45,6 +45,11 @@ from .streaming import (
     plot_control_run, recenter_on_brightest, recenter_on_longest_track,
     ramp_on_event, pause_on_event, combine_policies,
 )
+from . import adapters
+from .adapters import (
+    InstrumentAdapter, BackendSimulator, NanosurfAdapter, JPKAdapter,
+    AsylumAdapter,
+)
 from . import plotting
 
 __all__ = [
@@ -114,6 +119,12 @@ __all__ = [
     "ramp_on_event",
     "pause_on_event",
     "combine_policies",
+    "adapters",
+    "InstrumentAdapter",
+    "BackendSimulator",
+    "NanosurfAdapter",
+    "JPKAdapter",
+    "AsylumAdapter",
     "plotting",
     "synthetic_force_curve",
     "fit_modulus",

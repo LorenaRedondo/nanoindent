@@ -476,6 +476,48 @@ commands); the fast z-feedback that protects the tip runs on the instrument's ow
 kHz–MHz controller and must stay there. The web dashboard's *Live control
 (simulated)* page runs the whole thing interactively.
 
+### Vendor instrument adapters (Tier-2 scaffolds)
+
+`nanoindent.adapters` provides `FrameSource` adapters for three commercial AFM
+control interfaces, so the streaming/closed-loop pipeline can be pointed at a
+real microscope. Each adapter satisfies the same `__iter__` / `send` contract
+and plugs straight into `run_control_loop`:
+
+| Adapter | Vendor interface | Transport |
+|---|---|---|
+| `NanosurfAdapter` | official `nanosurf` Python package | in-process (COM/studio API) |
+| `JPKAdapter` | JPK / Bruker BioAFM (NanoWizard / ForceRobot / NanoRacer) | TCP socket protocol |
+| `AsylumAdapter` | Asylum Research (Oxford) | Igor Pro listener bridge |
+
+```python
+from nanoindent import StreamingAnalyzer, run_control_loop, recenter_on_brightest
+from nanoindent.adapters import JPKAdapter, MockJPKConnection, BackendSimulator
+
+backend = BackendSimulator(scan_px=64, D_nm2_per_s=200.0)      # simulated physics
+adapter = JPKAdapter(MockJPKConnection(backend), pixel_size_nm=2.0,
+                     frame_interval_s=0.05, max_frames=120)     # no hardware
+an = StreamingAnalyzer(adapter.pixel_size_nm, adapter.frame_interval_s)
+run_control_loop(adapter, an, recenter_on_brightest())         # closes the loop
+```
+
+Each adapter is validated **end-to-end against an in-process mock backend** that
+shares the reactive simulated physics, so all three translate the same commands
+and close the *same* loop (`examples/instrument_adapters.py`: identical ~2.8 px
+target-following across Nanosurf/JPK/Asylum); the JPK path is additionally
+exercised over a **real TCP loopback socket**. They are **scaffolds** — the
+vendor calls and wire grammars are reconstructed from documentation and marked
+`VERIFY`; confirm them against the SDK and instrument before a live run. To go
+live, construct the adapter with a real connection instead of a mock:
+
+```python
+NanosurfAdapter()                              # uses the nanosurf package
+JPKAdapter(host="192.168.1.10", port=55055)    # real SPM socket server
+AsylumAdapter(bridge=my_igor_socket_bridge)    # Igor listener bridge
+```
+
+**Safety** (unchanged): these adapters carry *supervisory* commands only; the
+fast tip-protection z-feedback stays on the instrument's own controller.
+
 ### Synthetic data & inverse analysis (end-to-end double-check)
 
 `nanoindent.dataset` closes the loop: it generates a **realistic AFM force
@@ -540,6 +582,7 @@ src/nanoindent/
 ├── slb.py          # supported-lipid-bilayer force-map analysis (breakthrough, κ_A, E)
 ├── video.py        # HS-AFM movies: readers, drift, tracking, diffusion, events
 ├── streaming.py    # online analyzer + simulated instrument + closed-loop control
+├── adapters/       # vendor FrameSource adapters (Nanosurf / JPK / Asylum scaffolds)
 └── plotting.py     # publication-quality figures (vector output, CB-safe)
 examples/
 ├── paper_reproduction.py       ├── model_comparison.py
@@ -548,7 +591,7 @@ examples/
 ├── analyze_afm_experiment.py   ├── publication_figure.py
 ├── msnl_bio_dc.py              ├── slb_force_map.py
 ├── hsafm_video.py              ├── streaming_control.py
-└── (msnl_bio_dc case study: R=20 nm, h=6.2 nm)
+├── instrument_adapters.py      └── (msnl_bio_dc case study)
 tests/               # unit + physics-validation (slow) suites
 ```
 
