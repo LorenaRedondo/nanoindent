@@ -42,6 +42,31 @@ def test_stiffer_than_hertz_thin_film(small_curve):
     assert small_curve.force[-1] > fh[-1]
 
 
+def test_mixed_formulation_runs_incompressible():
+    # The mixed formulation must accept nu = 0.5 and produce a sane curve.
+    cfg = SimulationConfig(nu=0.5, formulation="mixed", h=14.0, L=50.0,
+                           n_steps=3, delta_max=1.0, mesh_size_contact=0.6,
+                           mesh_size_edge=10.0, penalty_alpha=400.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        curve = IndentationSolver(cfg).run()
+    assert curve.force[0] == 0.0
+    assert np.all(np.diff(curve.force) > 0)          # monotone
+    assert np.nanmax(curve.equilibrium_residual) < 0.05
+
+
+def test_mixed_matches_primal_compressible():
+    # At nu = 0.3 (well away from incompressibility) mixed ~ primal.
+    common = dict(nu=0.3, h=60.0, L=60.0, n_steps=3, delta_max=1.0,
+                  mesh_size_contact=0.6, mesh_size_edge=12.0, penalty_alpha=400.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cp = IndentationSolver(SimulationConfig(formulation="primal", **common)).run()
+        cm = IndentationSolver(SimulationConfig(formulation="mixed", **common)).run()
+    rel = np.abs(cm.force[-1] - cp.force[-1]) / cp.force[-1]
+    assert rel < 0.02
+
+
 def test_csv_roundtrip(small_curve, tmp_path):
     from nanoindent import ForceCurve
     p = tmp_path / "curve.csv"

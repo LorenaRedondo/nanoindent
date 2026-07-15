@@ -68,6 +68,55 @@ def test_thinner_film_is_stiffer():
     assert c7.force[-1] > c14.force[-1]
 
 
+def test_cone_recovers_sneddon_thick_film():
+    # A sharp cone on a thick film should follow Sneddon's F ~ delta^2 law.
+    curve, cfg = _run(tip_shape="cone", tip_half_angle_deg=70.3,
+                      h=200.0, L=200.0, nu=0.3, n_steps=8, delta_max=1.0,
+                      mesh_size_contact=0.3, mesh_size_edge=12.0,
+                      penalty_alpha=400.0)
+    sned = analytics.sneddon_cone_force(curve.delta, 70.3, cfg.E, cfg.nu)
+    mask = curve.delta >= 0.5
+    rel = np.abs(curve.force[mask] - sned[mask]) / sned[mask]
+    assert np.mean(rel) < 0.05
+
+
+def test_paraboloid_recovers_hertz_thick_film():
+    curve, cfg = _run(tip_shape="paraboloid", R=17.0,
+                      h=200.0, L=200.0, nu=0.3, n_steps=8, delta_max=1.0,
+                      mesh_size_contact=0.35, mesh_size_edge=12.0,
+                      penalty_alpha=400.0)
+    fh = analytics.hertz_force(curve.delta, cfg.R, cfg.E, cfg.nu)
+    mask = curve.delta >= 0.5
+    ratio = curve.force[mask] / fh[mask]
+    assert abs(np.mean(ratio) - 1.0) < 0.03
+
+
+def test_chadwick_limit_mixed_incompressible():
+    # Mixed (nu=0.5) FEM must converge to Chadwick's thin-layer law as the
+    # thin-film parameter chi = sqrt(R*delta)/h grows.
+    R, E = 17.0, 130.0
+    results = []
+    for h, dmax in [(2.0, 2.0), (1.5, 3.0), (1.0, 4.0)]:
+        cfg = SimulationConfig(nu=0.5, formulation="mixed", tip_shape="paraboloid",
+                               h=h, L=80.0, R=R, E=E, delta_max=dmax, n_steps=5,
+                               mesh_size_contact=0.12, mesh_size_edge=4.0,
+                               penalty_alpha=800.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            curve = IndentationSolver(cfg).run()
+        chad = analytics.chadwick_force(curve.delta, R, E, h)
+        chi = np.sqrt(R * curve.delta[-1]) / h
+        results.append((chi, curve.force[-1] / chad[-1]))
+
+    chis = [r[0] for r in results]
+    ratios = [r[1] for r in results]
+    # Monotone approach to 1 from above as chi increases.
+    assert chis[0] < chis[1] < chis[2]
+    assert ratios[0] > ratios[1] > ratios[2]
+    # At the largest chi the FEM is within 15% of Chadwick's coefficient.
+    assert abs(ratios[-1] - 1.0) < 0.15
+
+
 def test_contact_radius_thick_film():
     curve, cfg = _run(h=200.0, L=200.0, nu=0.3, n_steps=6, delta_max=1.0,
                       mesh_size_contact=0.3, mesh_size_edge=12.0,

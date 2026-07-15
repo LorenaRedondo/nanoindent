@@ -39,9 +39,26 @@ class SimulationConfig:
     the solver code.  Values are validated in :meth:`__post_init__`.
     """
 
+    # -- indenter ----------------------------------------------------------
+    tip_shape: str = "sphere"
+    """Indenter geometry (axisymmetric): ``"sphere"``, ``"paraboloid"``,
+    ``"cone"`` or ``"blunted_cone"``.  Pyramids (Berkovich, Vickers,
+    cube-corner) are non-axisymmetric — use a ``cone`` with ``tip_pyramid``
+    set to the equivalent cone (see ``contact.equivalent_cone_half_angle``)."""
+
+    tip_half_angle_deg: Optional[float] = None
+    """Cone half-angle from the axis (deg), required for ``cone`` /
+    ``blunted_cone`` unless ``tip_pyramid`` is given."""
+
+    tip_pyramid: Optional[str] = None
+    """If set (``"berkovich"``, ``"vickers"``, ``"cube_corner"``), a
+    ``cone`` / ``blunted_cone`` tip uses the matching equivalent-cone
+    half-angle instead of ``tip_half_angle_deg``."""
+
     # -- geometry (nm) -----------------------------------------------------
     R: float = 17.0
-    """Tip radius (nm).  Rigid sphere, never meshed."""
+    """Tip radius (nm).  Used by sphere / paraboloid / blunted_cone; ignored by
+    a sharp cone.  The rigid tip is never meshed."""
 
     h: float = 7.0
     """Film thickness (nm)."""
@@ -79,6 +96,13 @@ class SimulationConfig:
     element_order: int = 2
     """Displacement element order.  2 (P2) is strongly recommended for
     contact accuracy and bending across a thin film."""
+
+    formulation: str = "primal"
+    """Elasticity formulation: ``"primal"`` (single-field P2 displacement,
+    default) or ``"mixed"`` (Taylor-Hood P2 displacement / P1 pressure).  The
+    mixed formulation is locking-free and supports fully incompressible
+    ``nu = 0.5`` (needed to verify the Chadwick thin-incompressible-layer
+    limit); use it whenever ``nu >= 0.45``."""
 
     # -- contact -----------------------------------------------------------
     penalty_alpha: float = 100.0
@@ -120,29 +144,59 @@ class SimulationConfig:
             if not (value > 0):
                 raise ValueError(f"{name} must be > 0, got {value!r}")
 
-        if not (-1.0 < self.nu < 0.5):
-            raise ValueError(
-                f"nu must be in (-1, 0.5), got {self.nu!r}. "
-                "nu = 0.5 (fully incompressible) is not supported by the "
-                "displacement formulation."
-            )
-        if self.nu >= 0.45:
-            warnings.warn(
-                f"nu = {self.nu} is near-incompressible; P2 displacement "
-                "elements may lock and over-stiffen the response. Treat "
-                "results with caution (design doc section 5.3).",
-                stacklevel=2,
-            )
+        mixed = str(self.formulation).strip().lower() == "mixed"
+        if mixed:
+            # Taylor-Hood supports full incompressibility.
+            if not (-1.0 < self.nu <= 0.5):
+                raise ValueError(
+                    f"nu must be in (-1, 0.5] for the mixed formulation, "
+                    f"got {self.nu!r}"
+                )
+        else:
+            if not (-1.0 < self.nu < 0.5):
+                raise ValueError(
+                    f"nu must be in (-1, 0.5), got {self.nu!r}. "
+                    "nu = 0.5 (fully incompressible) needs formulation='mixed'."
+                )
+            if self.nu >= 0.45:
+                warnings.warn(
+                    f"nu = {self.nu} is near-incompressible; the primal P2 "
+                    "formulation may lock and over-stiffen. Use "
+                    "formulation='mixed' (design doc section 5.3).",
+                    stacklevel=2,
+                )
+        if self.formulation not in ("primal", "mixed"):
+            raise ValueError("formulation must be 'primal' or 'mixed'")
 
         if self.n_steps < 1:
             raise ValueError(f"n_steps must be >= 1, got {self.n_steps}")
         if self.element_order not in (1, 2):
             raise ValueError("element_order must be 1 or 2")
-        if self.delta_max >= self.R:
+
+        # -- indenter --------------------------------------------------------
+        shape = str(self.tip_shape).strip().lower()
+        valid_shapes = {"sphere", "paraboloid", "cone", "blunted_cone"}
+        if shape not in valid_shapes:
+            raise ValueError(
+                f"tip_shape must be one of {sorted(valid_shapes)}, "
+                f"got {self.tip_shape!r}"
+            )
+        # Sphere/blunted_cone use an exact spherical cap: delta_max must stay
+        # within the sphere (contact radius < R).
+        if shape in ("sphere", "blunted_cone") and self.delta_max >= self.R:
             raise ValueError(
                 "delta_max must be < R for the spherical gap function to be "
                 f"well defined, got delta_max={self.delta_max}, R={self.R}"
             )
+        if shape in ("cone", "blunted_cone"):
+            if self.tip_pyramid is None and self.tip_half_angle_deg is None:
+                raise ValueError(
+                    f"tip_shape={shape!r} requires tip_half_angle_deg or "
+                    "tip_pyramid"
+                )
+            if (self.tip_half_angle_deg is not None
+                    and not (0.0 < self.tip_half_angle_deg < 90.0)):
+                raise ValueError("tip_half_angle_deg must be in (0, 90)")
         if self.mesh_size_edge < self.mesh_size_contact:
             raise ValueError(
                 "mesh_size_edge must be >= mesh_size_contact "

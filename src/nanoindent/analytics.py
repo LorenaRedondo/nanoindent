@@ -125,6 +125,51 @@ def garcia_bec_force(delta, R: float, E: float, nu: float, h: float) -> np.ndarr
     return hertz_force(delta, R, E, nu) * poly
 
 
+def chadwick_force(delta, R: float, E: float, h: float) -> np.ndarray:
+    """Chadwick 2002 thin-layer force for a parabolic tip on a bonded
+    **incompressible** film (SIAM J. Appl. Math. 62, 1520).
+
+    In the thin-film limit (contact radius >> h) a bonded incompressible layer
+    can only accommodate the indenter by squeezing material laterally, which
+    makes the response stiffen as ``1/h**3``.  A lubrication-type analysis of a
+    parabolic indenter (bonded bottom, shear-free top, nu = 1/2) gives
+
+        F = (2*pi/3) * E * R**2 * delta**3 / h**3,     a = 2*sqrt(R*delta)
+
+    (equivalently ``2*pi*mu*R**2*delta**3/h**3`` with ``mu = E/3``).  This is
+    the incompressible asymptote that the Dimitriadis 2002 bonded polynomial
+    approaches for thin films; unlike Dimitriadis it does **not** reduce to
+    Hertz for thick films, so only overlay it in its thin-film regime.
+
+    Note: the formula assumes nu = 1/2 and ignores ``nu`` by construction.
+    """
+    delta = np.asarray(delta, dtype=float)
+    return (2.0 * np.pi / 3.0) * E * R ** 2 * np.clip(delta, 0.0, None) ** 3 / h ** 3
+
+
+def paraboloid_force(delta, R: float, E: float, nu: float) -> np.ndarray:
+    """Force for a paraboloidal tip on a half-space.
+
+    Identical to :func:`hertz_force` (Hertz's sphere law is the paraboloid
+    result in the small-strain limit); provided as an explicitly named model.
+    """
+    return hertz_force(delta, R, E, nu)
+
+
+def sneddon_cone_force(delta, half_angle_deg: float, E: float,
+                       nu: float) -> np.ndarray:
+    """Sneddon force for a rigid cone on an elastic half-space.
+
+    ``F = (2/pi) * E_star * tan(theta) * delta**2`` where ``theta`` is the cone
+    half-angle measured from the indentation axis and ``E_star = E/(1-nu^2)``.
+    Returns pN for delta in nm, E in MPa.
+    """
+    delta = np.asarray(delta, dtype=float)
+    E_star = E / (1.0 - nu ** 2)
+    theta = np.deg2rad(half_angle_deg)
+    return (2.0 / np.pi) * E_star * np.tan(theta) * np.clip(delta, 0.0, None) ** 2
+
+
 def contact_radius_hertz(delta, R: float) -> np.ndarray:
     """Hertz contact radius ``a = sqrt(R*delta)`` (nm)."""
     delta = np.asarray(delta, dtype=float)
@@ -154,6 +199,9 @@ def model_registry() -> dict:
     def _garcia(delta, cfg):
         return garcia_bec_force(delta, cfg.R, cfg.E, cfg.nu, cfg.h)
 
+    def _chadwick(delta, cfg):
+        return chadwick_force(delta, cfg.R, cfg.E, cfg.h)
+
     return {
         "hertz": AnalyticModel("hertz", "Hertz (half-space)", _hertz),
         "dimitriadis_bonded": AnalyticModel(
@@ -167,4 +215,47 @@ def model_registry() -> dict:
         "garcia_bec": AnalyticModel(
             "garcia_bec", "Garcia & Garcia 2018 BEC", _garcia
         ),
+        "chadwick_2002": AnalyticModel(
+            "chadwick_2002", "Chadwick 2002 (thin incompressible)", _chadwick
+        ),
     }
+
+
+# Convenience grouping for the common "compare all corrections" request.
+BEC_MODELS = ["hertz", "garcia_bec", "dimitriadis_bonded", "chadwick_2002"]
+
+
+def compare_models(cfg, delta=None, models=None) -> dict:
+    """Evaluate several analytic models on a common indentation grid.
+
+    Parameters
+    ----------
+    cfg:
+        Anything exposing ``R``, ``E``, ``nu``, ``h`` (e.g. a
+        :class:`~nanoindent.SimulationConfig`).
+    delta:
+        Indentation array (nm). Defaults to 50 points on ``[0, cfg.delta_max]``.
+    models:
+        Model keys to evaluate. Defaults to :data:`BEC_MODELS`
+        (Hertz, Garcia & Garcia, Dimitriadis 2002, Chadwick 2002).
+
+    Returns
+    -------
+    dict
+        ``{"delta": array, <model_key>: force_array, ...}``.
+    """
+    reg = model_registry()
+    if models is None:
+        models = BEC_MODELS
+    if delta is None:
+        dmax = getattr(cfg, "delta_max", 1.0)
+        delta = np.linspace(0.0, dmax, 50)
+    delta = np.asarray(delta, dtype=float)
+
+    out = {"delta": delta}
+    for key in models:
+        if key not in reg:
+            raise ValueError(
+                f"unknown model {key!r}; available: {sorted(reg)}")
+        out[key] = reg[key].func(delta, cfg)
+    return out
