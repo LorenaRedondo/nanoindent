@@ -91,6 +91,20 @@ def test_paraboloid_recovers_hertz_thick_film():
     assert abs(np.mean(ratio) - 1.0) < 0.03
 
 
+def test_incompressible_film_stiffer_than_compressible():
+    # A bonded thin film is much stiffer at nu=0.5 (mixed) than nu=0.3 (primal).
+    common = dict(tip_shape="paraboloid", R=20.0, E=50.0, h=6.2, L=200.0,
+                  delta_max=2.0, n_steps=5, mesh_size_contact=0.05,
+                  mesh_size_edge=4.0, penalty_alpha=600.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        c5 = IndentationSolver(SimulationConfig(nu=0.5, formulation="mixed",
+                                                **common)).run()
+        c3 = IndentationSolver(SimulationConfig(nu=0.3, formulation="primal",
+                                                **common)).run()
+    assert c5.force[-1] > 1.5 * c3.force[-1]
+
+
 def test_chadwick_limit_mixed_incompressible():
     # Mixed (nu=0.5) FEM must converge to Chadwick's thin-layer law as the
     # thin-film parameter chi = sqrt(R*delta)/h grows.

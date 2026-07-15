@@ -410,7 +410,8 @@ examples/
 ├── paper_reproduction.py       ├── model_comparison.py
 ├── hertz_validation.py         ├── chadwick_verification.py
 ├── synthetic_analysis.py       ├── field_heatmap.py
-├── analyze_afm_experiment.py   └── publication_figure.py
+├── analyze_afm_experiment.py   ├── publication_figure.py
+├── msnl_bio_dc.py              └── (case study: R=20 nm, h=6.2 nm)
 tests/               # unit + physics-validation (slow) suites
 ```
 
