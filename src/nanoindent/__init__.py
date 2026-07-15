@@ -20,6 +20,7 @@ from .postproc import ForceCurve
 from . import analytics
 from . import convergence
 from . import dataset
+from . import plotting
 from .dataset import synthetic_force_curve, fit_modulus, SyntheticDataset, ModulusFit
 
 __all__ = [
@@ -34,6 +35,7 @@ __all__ = [
     "analytics",
     "convergence",
     "dataset",
+    "plotting",
     "synthetic_force_curve",
     "fit_modulus",
     "SyntheticDataset",
