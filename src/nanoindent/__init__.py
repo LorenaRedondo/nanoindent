@@ -38,6 +38,13 @@ from .video import (
     msd, diffusion_coefficient, ensemble_diffusion, height_timeseries,
     detect_events, animate_video, plot_summary,
 )
+from . import streaming
+from .streaming import (
+    StreamingAnalyzer, AnalysisState, OnlineTrack, Command, FrameSource,
+    VideoFrameSource, SimulatedInstrument, run_control_loop, RunReport,
+    plot_control_run, recenter_on_brightest, recenter_on_longest_track,
+    ramp_on_event, pause_on_event, combine_policies,
+)
 from . import plotting
 
 __all__ = [
@@ -91,6 +98,22 @@ __all__ = [
     "detect_events",
     "animate_video",
     "plot_summary",
+    "streaming",
+    "StreamingAnalyzer",
+    "AnalysisState",
+    "OnlineTrack",
+    "Command",
+    "FrameSource",
+    "VideoFrameSource",
+    "SimulatedInstrument",
+    "run_control_loop",
+    "RunReport",
+    "plot_control_run",
+    "recenter_on_brightest",
+    "recenter_on_longest_track",
+    "ramp_on_event",
+    "pause_on_event",
+    "combine_policies",
     "plotting",
     "synthetic_force_curve",
     "fit_modulus",
