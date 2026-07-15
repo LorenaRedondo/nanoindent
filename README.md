@@ -369,6 +369,31 @@ fit, (delta, force) = analyze_experiment(
 print(fit.E_fit)                                   # recovered modulus (MPa)
 ```
 
+### Force maps & supported lipid bilayers
+
+`read_jpk_map` reads a **JPK force-volume map** (`.jpk-force-map`) — a grid of
+force curves — decoding the real JPK `lcd-info` calibration chain (raw →
+volts → distance/force) and returning a `JPKForceMap` of `ForceCurveData` with
+the spring constant and InvOLS auto-extracted. `nanoindent.slb` then analyses a
+supported-lipid-bilayer map:
+
+```python
+from nanoindent import read_jpk_map, slb
+fmap = read_jpk_map("bilayer_map.jpk-force-map")
+an = slb.analyze_map(fmap, R=20.0, nu=0.5, film_thickness=5.0, fit_max_delta=3.0)
+print(an.summary())                 # breakthrough force, height, E per model
+fig = slb.plot_analysis(an)         # 4-panel: distributions + FEM cross-check
+```
+
+Per curve it extracts the **breakthrough (yield) force**, the **bilayer height**
+(breakthrough step), and the **Young's modulus** fit with **Hertz, Dimitriadis
+2002, Garcia & Garcia 2018, and Chadwick 2002** over a common small-indentation
+window (δ ≲ h, where the finite-thickness corrections are valid), and can run a
+**FEM cross-check** at the fitted modulus. On a real gel-phase SLB map (400
+curves): breakthrough ≈ 22 nN, height ≈ 2.6 nm, apparent E (Hertz) ≈ 48 MPa vs
+bottom-effect-corrected 4–14 MPa. The same analysis is available in the web
+dashboard (SLB force-map page) — just upload a file.
+
 The whole path is validated by a synthetic round-trip: `synthetic_raw_curve`
 generates the `(Z, deflection)` an AFM would record at a known `E`, and
 `to_force_indentation` → `fit_modulus` recovers it (`examples/analyze_afm_experiment.py`

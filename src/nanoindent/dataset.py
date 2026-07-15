@@ -42,6 +42,8 @@ def _shape_function(model: str, R: float, nu: float, h: float) -> Callable:
         return lambda d: analytics.dimitriadis_force(d, R, 1.0, nu, h, bonded=True)
     if model == "garcia_bec":
         return lambda d: analytics.garcia_bec_force(d, R, 1.0, nu, h)
+    if model in ("chadwick", "chadwick_2002"):
+        return lambda d: analytics.chadwick_force(d, R, 1.0, h)
     raise ValueError(f"unknown model {model!r}")
 
 
