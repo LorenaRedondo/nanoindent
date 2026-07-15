@@ -18,6 +18,10 @@ from .jpk import (
     JPKAdapter, MockJPKConnection, SocketJPKConnection, JPKInstrumentServer,
     JPKCapabilities, JPKForceRamp, JPKError, serve_backend, handle_one_client,
 )
+from .jpk_dialects import (
+    JPKDialect, REFERENCE, JPK_SPM_LEGACY, JPK_SPM_4PLUS, BRUKER_BIOAFM,
+    DIALECTS, select_dialect, get_dialect,
+)
 from .asylum import AsylumAdapter, MockIgorBridge
 
 __all__ = [
@@ -32,6 +36,14 @@ __all__ = [
     "JPKCapabilities",
     "JPKForceRamp",
     "JPKError",
+    "JPKDialect",
+    "REFERENCE",
+    "JPK_SPM_LEGACY",
+    "JPK_SPM_4PLUS",
+    "BRUKER_BIOAFM",
+    "DIALECTS",
+    "select_dialect",
+    "get_dialect",
     "serve_backend",
     "handle_one_client",
     "AsylumAdapter",

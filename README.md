@@ -553,8 +553,33 @@ with JPKAdapter(SocketJPKConnection("192.168.1.10", 55055),
 
 `examples/jpk_live_session.py` runs the whole session against the loopback server
 (handshake → engage → stream 120 frames → 11 event-triggered F–d curves →
-withdraw). The wire grammar remains a documented-shape placeholder marked
-`VERIFY` — confirm it against your JPK scripting reference before going live.
+withdraw).
+
+**Version-aware dialects.** JPK's grammar differs across software generations, so
+the wire strings live in a swappable `JPKDialect` (`jpk_dialects.py`), one profile
+per generation. The adapter **auto-detects the version from the handshake** and
+selects the matching dialect:
+
+```python
+from nanoindent.adapters import JPKAdapter, SocketJPKConnection, select_dialect
+ad = JPKAdapter(SocketJPKConnection("192.168.1.10", 55055), dialect="auto")
+#   NanoWizard 3.x → jpk_spm_legacy · NanoWizard 4/Sense → jpk_spm_4plus
+#   Bruker BioAFM / NanoRacer → bruker_bioafm    (or force: dialect="bruker_bioafm")
+```
+
+| Dialect | Software generation |
+|---|---|
+| `jpk_spm_legacy` | NanoWizard 1–3, ForceRobot, CellHesion (JPK SPM ≤3.x) |
+| `jpk_spm_4plus` | NanoWizard 4 / Sense / ULTRA Speed (JPK SPM 4.x–6.x) |
+| `bruker_bioafm` | Bruker BioAFM software, NanoRacer (post-2018) |
+
+⚠️ These are **placeholder** grammars (`verified=False`) — the concrete verb
+strings for each version are proprietary and must be copied from that version's
+JPK/Bruker scripting reference; the dialect gives each one a named slot and a
+single place to paste it (one line per command). The dialect machinery itself is
+proven end-to-end (a fictional distinct grammar drives the full closed loop over
+TCP in the tests). See `examples/jpk_versions.py`. Only a dialect confirmed
+against real hardware should be marked `verified=True`.
 
 ### Synthetic data & inverse analysis (end-to-end double-check)
 
@@ -630,7 +655,8 @@ examples/
 ├── msnl_bio_dc.py              ├── slb_force_map.py
 ├── hsafm_video.py              ├── streaming_control.py
 ├── instrument_adapters.py      ├── jpk_live_session.py
-├── model_slides.py             └── (msnl_bio_dc case study)
+├── jpk_versions.py             ├── model_slides.py
+└── (msnl_bio_dc case study)
 tests/               # unit + physics-validation (slow) suites
 ```
 
