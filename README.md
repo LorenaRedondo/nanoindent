@@ -99,6 +99,7 @@ python examples/paper_reproduction.py           # writes results/{h7,h14}.csv + 
 python examples/hertz_validation.py             # thick-film Hertz check
 python examples/synthetic_analysis.py           # realistic dataset -> modulus recovery
 python examples/publication_figure.py           # journal-ready multi-panel figure (PDF/PNG/SVG)
+python examples/model_comparison.py              # Hertz/Garcia/Dimitriadis/Chadwick vs FEM
 ```
 
 ### Publication-quality figures
@@ -228,6 +229,37 @@ convergence.penalty_study(cfg)     # alpha sweep; F plateaus, interpenetration -
 convergence.load_step_study(cfg)   # n_steps sweep; elastic => path-independent
 ```
 
+### Comparing contact models
+
+`nanoindent.analytics` bundles the standard AFM contact models and lets you
+compare them (and the FEM) on one grid. The default set is **Hertz**,
+**Garcia & Garcia 2018**, **Dimitriadis 2002 (bonded)**, and **Chadwick 2002**:
+
+```python
+from nanoindent import SimulationConfig, analytics, plotting
+cfg = SimulationConfig(h=7.0)
+table = analytics.compare_models(cfg)                 # dict: delta + each model
+plotting.plot_model_comparison(cfg, fem_curve=result) # overlay all + FEM
+```
+
+| key | model | regime |
+|---|---|---|
+| `hertz` | Hertz half-space | thick film / baseline |
+| `garcia_bec` | Garcia & Garcia 2018 BEC (paraboloid) | bonded, finite h |
+| `dimitriadis_bonded` | Dimitriadis 2002 bonded polynomial (general ν) | bonded, crossover |
+| `chadwick_2002` | Chadwick 2002 thin **incompressible** layer, `F=(2π/3)E R²δ³/h³` | bonded, deep thin-film (ν→½) |
+
+![model comparison](docs/model_comparison.png)
+
+`analytics.BEC_MODELS` is the default list; pass your own `models=[...]` to
+either function. Note the two 2002 papers are **distinct**: Dimitriadis *et al.*
+(*Biophys. J.* **82**, 2798) is the empirical polynomial that interpolates
+Hertz→thin for general ν; Chadwick (*SIAM J. Appl. Math.* **62**, 1520) is the
+asymptotic thin-**incompressible**-layer law it is built on — it stiffens as
+`1/h³` and only applies in the deep thin-film limit (it does *not* reduce to
+Hertz for thick films). `examples/model_comparison.py` overlays all four vs. the
+FEM across thicknesses.
+
 ### Synthetic data & inverse analysis (end-to-end double-check)
 
 `nanoindent.dataset` closes the loop: it generates a **realistic AFM force
@@ -285,7 +317,7 @@ src/nanoindent/
 ├── contact.py      # tip zoo (sphere/paraboloid/cone/blunted): gap, penalty
 ├── solver.py       # IndentationSolver: assembly, Newton, reaction extraction
 ├── postproc.py     # ForceCurve: CSV IO, diagnostics, plotting
-├── analytics.py    # Hertz; Dimitriadis 2002; Garcia & Garcia 2018 BEC
+├── analytics.py    # Hertz; Dimitriadis 2002; Garcia 2018; Chadwick 2002; compare_models
 ├── convergence.py  # mesh / penalty / load-step studies
 ├── dataset.py      # synthetic AFM data + modulus-recovery inverse analysis
 └── plotting.py     # publication-quality figures (vector output, CB-safe)

@@ -65,6 +65,15 @@ def test_plot_stiffening_ratio_runs():
     assert len(fig.axes[0].lines) > 0
 
 
+def test_plot_model_comparison_runs():
+    cfg = SimulationConfig(h=7.0, R=17.0, E=130.0, nu=0.3, delta_max=1.0)
+    fig = plotting.plot_model_comparison(cfg, fem_curve=_fake_curve(7.0))
+    ax = fig.axes[0]
+    labels = [ln.get_label() for ln in ax.lines]
+    assert any("Chadwick" in str(l) for l in labels)
+    assert any("Hertz" in str(l) for l in labels)
+
+
 def test_plot_modulus_recovery_runs():
     results = [
         {"h": 7.0, "model": "hertz", "E_fit": 267.0},

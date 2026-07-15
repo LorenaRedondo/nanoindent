@@ -330,6 +330,50 @@ def plot_modulus_recovery(
     return fig
 
 
+def plot_model_comparison(cfg, models=None, fem_curve=None,
+                          width: float = SINGLE_COLUMN, ax=None,
+                          delta=None):
+    """Overlay several analytic contact models (and optionally an FEM curve).
+
+    ``models`` defaults to :data:`nanoindent.analytics.BEC_MODELS`
+    (Hertz, Garcia & Garcia, Dimitriadis 2002, Chadwick 2002). ``cfg`` supplies
+    R / E / nu / h. Pass ``fem_curve`` (a ForceCurve) to show the simulation
+    alongside the closed-form models.
+    """
+    if ax is None:
+        fig, axes = _new_fig(width)
+        ax = axes[0, 0]
+    else:
+        fig = ax.figure
+
+    reg = analytics.model_registry()
+    if models is None:
+        models = analytics.BEC_MODELS
+    if delta is None:
+        dmax = getattr(cfg, "delta_max", 1.0)
+        delta = np.linspace(0.0, dmax, 200)
+
+    for i, key in enumerate(models):
+        if key not in reg:
+            continue
+        style = ":" if key == "hertz" else "-"
+        color = OKABE_ITO["black"] if key == "hertz" else _CYCLE[i % len(_CYCLE)]
+        ax.plot(delta, reg[key].func(delta, cfg), style, color=color,
+                lw=1.3, label=reg[key].label)
+
+    if fem_curve is not None:
+        ax.plot(fem_curve.delta, fem_curve.force, "o", color=OKABE_ITO["vermillion"],
+                ms=3.5, label="FEM", zorder=6)
+
+    ax.set_xlabel(r"indentation $\delta$ (nm)")
+    ax.set_ylabel(r"force $F$ (pN)")
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0)
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc="upper left")
+    return fig
+
+
 def plot_convergence(records: Sequence["ConvergenceRecord"],
                      width: float = SINGLE_COLUMN, ax=None):
     """Plot a convergence study: force at delta_max vs. the swept parameter."""

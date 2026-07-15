@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from nanoindent import analytics
+from nanoindent import analytics, SimulationConfig
 
 
 def test_hertz_scaling():
@@ -74,8 +74,47 @@ def test_contact_radius_hertz():
 
 def test_registry_keys():
     reg = analytics.model_registry()
-    for k in ("hertz", "dimitriadis_bonded", "garcia_bec"):
+    for k in ("hertz", "dimitriadis_bonded", "garcia_bec", "chadwick_2002"):
         assert k in reg
         cfg = type("C", (), dict(R=17.0, E=130.0, nu=0.3, h=7.0))()
         val = reg[k].func(np.array([0.5]), cfg)
         assert np.all(val > 0)
+
+
+def test_chadwick_scaling_and_coefficient():
+    R, E, h = 17.0, 130.0, 5.0
+    d = np.array([0.5, 1.0])
+    F = analytics.chadwick_force(d, R, E, h)
+    # F ~ delta^3: doubling delta gives 8x
+    assert F[1] / F[0] == pytest.approx(8.0, rel=1e-9)
+    # exact coefficient F = (2 pi/3) E R^2 delta^3 / h^3
+    assert F[1] == pytest.approx((2 * np.pi / 3) * E * R ** 2 * 1.0 ** 3 / h ** 3)
+
+
+def test_chadwick_inverse_cube_thickness():
+    # Bonded incompressible thin layer stiffens as 1/h^3.
+    F_h = analytics.chadwick_force(1.0, 17.0, 130.0, 5.0)
+    F_2h = analytics.chadwick_force(1.0, 17.0, 130.0, 10.0)
+    assert F_h / F_2h == pytest.approx(8.0, rel=1e-9)
+
+
+def test_chadwick_dominates_in_thin_limit():
+    # As h shrinks, Chadwick overtakes Hertz (thin-film stiffening).
+    d = 1.0
+    thin = analytics.chadwick_force(d, 17.0, 130.0, 2.0)
+    hertz = analytics.hertz_force(d, 17.0, 130.0, 0.3)
+    assert thin > hertz
+
+
+def test_compare_models_returns_all_keys():
+    cfg = SimulationConfig(h=7.0, R=17.0, E=130.0, nu=0.3, delta_max=1.0)
+    out = analytics.compare_models(cfg, delta=np.array([0.5, 1.0]))
+    assert "delta" in out
+    for k in analytics.BEC_MODELS:
+        assert k in out and out[k].shape == (2,)
+
+
+def test_compare_models_unknown_raises():
+    cfg = SimulationConfig(h=7.0)
+    with pytest.raises(ValueError):
+        analytics.compare_models(cfg, models=["hertz", "nonsense"])

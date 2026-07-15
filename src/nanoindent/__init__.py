@@ -21,6 +21,7 @@ from .geometry import build_mesh, Domain
 from .solver import IndentationSolver
 from .postproc import ForceCurve
 from . import analytics
+from .analytics import compare_models, BEC_MODELS
 from . import convergence
 from . import dataset
 from . import plotting
@@ -42,6 +43,8 @@ __all__ = [
     "IndentationSolver",
     "ForceCurve",
     "analytics",
+    "compare_models",
+    "BEC_MODELS",
     "convergence",
     "dataset",
     "plotting",
