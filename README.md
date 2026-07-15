@@ -518,6 +518,44 @@ AsylumAdapter(bridge=my_igor_socket_bridge)    # Igor listener bridge
 **Safety** (unchanged): these adapters carry *supervisory* commands only; the
 fast tip-protection z-feedback stays on the instrument's own controller.
 
+#### JPK / Bruker BioAFM — deepened toward a live connection
+
+The JPK adapter goes past the scaffold: it models a realistic live session, all
+testable over a faithful loopback `JPKInstrumentServer` (no hardware).
+
+```python
+from nanoindent.adapters import JPKAdapter, SocketJPKConnection
+
+with JPKAdapter(SocketJPKConnection("192.168.1.10", 55055),
+                stream=True, record_ramps=True) as ad:   # one connection, whole session
+    caps = ad.capabilities              # handshake: pixel size / fps read FROM the instrument
+    ad.engage(); ad.set_setpoint(0.3); ad.set_feedback_gains(0.5, 120.0)
+    rep = run_control_loop(ad, an, combine_policies(recenter_on_brightest(),
+                                                    ramp_on_event()))
+    for fr in ad.force_ramps:           # F–d curves returned by event-triggered ramps
+        print(fr.max_force_pN)
+    ad.withdraw()
+```
+
+- **Handshake / capabilities** — the adapter reads pixel size, frame interval and
+  channels from the instrument (`auto_calibrate`), rather than hand-set constants.
+- **Push streaming** — a background reader demultiplexes pushed frames, force-curve
+  data, and command replies off one socket (`stream=True`), the way HS-AFM delivers
+  frames. Strictly-ordered **pull** mode keeps the tight closed loop; **streaming**
+  mode is high-throughput acquisition + analysis + event-triggered ramps.
+- **Force spectroscopy** — a `FORCE-RAMP` round trip returns the F–distance curve, so
+  a policy can act on the analysis (drop a ramp on a detected event) and keep the
+  measurement (`record_ramps=True` → `adapter.force_ramps`).
+- **Control + robustness** — engage/withdraw, setpoint, feedback gains, line rate,
+  absolute moves, keepalive `ping`, structured `JPKError`, timeouts, and a
+  connection lifecycle where the control loop no longer closes a caller-opened
+  connection (setup → loop → teardown share one).
+
+`examples/jpk_live_session.py` runs the whole session against the loopback server
+(handshake → engage → stream 120 frames → 11 event-triggered F–d curves →
+withdraw). The wire grammar remains a documented-shape placeholder marked
+`VERIFY` — confirm it against your JPK scripting reference before going live.
+
 ### Synthetic data & inverse analysis (end-to-end double-check)
 
 `nanoindent.dataset` closes the loop: it generates a **realistic AFM force
@@ -591,7 +629,8 @@ examples/
 ├── analyze_afm_experiment.py   ├── publication_figure.py
 ├── msnl_bio_dc.py              ├── slb_force_map.py
 ├── hsafm_video.py              ├── streaming_control.py
-├── instrument_adapters.py      └── (msnl_bio_dc case study)
+├── instrument_adapters.py      ├── jpk_live_session.py
+├── model_slides.py             └── (msnl_bio_dc case study)
 tests/               # unit + physics-validation (slow) suites
 ```
 

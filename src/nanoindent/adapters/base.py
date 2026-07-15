@@ -85,6 +85,10 @@ class InstrumentAdapter(ABC):
             self._connected = True
 
     def __iter__(self):
+        # Only tear down a connection this iteration opened. If the caller
+        # already connected (context manager, a setup/engage call), leave it
+        # open so setup -> loop -> teardown share one connection.
+        opened_here = not self._connected
         self._ensure_connected()
         i = 0
         try:
@@ -97,8 +101,9 @@ class InstrumentAdapter(ABC):
                 yield frame
                 i += 1
         finally:
-            self._disconnect()
-            self._connected = False
+            if opened_here:
+                self._disconnect()
+                self._connected = False
 
     def send(self, command: Command) -> None:
         self.command_log.append(command)
