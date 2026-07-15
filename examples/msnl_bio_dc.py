@@ -43,11 +43,12 @@ from nanoindent import SimulationConfig, IndentationSolver, analytics, plotting
 R, E, L, H, DMAX = 20.0, 50.0, 200.0, 6.2, 2.0
 BASE = dict(tip_shape="paraboloid", R=R, E=E, L=L, h=H, delta_max=DMAX,
             mesh_size_edge=4.0, penalty_alpha=600.0)
+SUBSTRATE = "bonded"      # overridden by --substrate
 
 
 def _run(nu, mesh_contact, n_steps, mixed):
     cfg = SimulationConfig(
-        nu=nu, formulation="mixed" if mixed else "primal",
+        nu=nu, formulation="mixed" if mixed else "primal", substrate=SUBSTRATE,
         n_steps=n_steps, mesh_size_contact=mesh_contact, **BASE)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -96,8 +97,13 @@ def main():
                     help="near-contact element size for the production run (nm)")
     ap.add_argument("--quick", action="store_true",
                     help="coarser/faster settings for a smoke run")
+    ap.add_argument("--substrate", default="bonded",
+                    choices=["bonded", "unbonded"],
+                    help="bottom BC: bonded (u=0) or unbonded (frictionless slip)")
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
+    global SUBSTRATE
+    SUBSTRATE = args.substrate
 
     conv_sizes = (0.04, 0.02) if args.quick else (0.04, 0.02, 0.01, 0.005)
     n_conv = 6 if args.quick else 8

@@ -67,6 +67,13 @@ class SimulationConfig:
     """Lateral size (nm).  Interpreted as the domain *radius* by default
     (see the design doc, section 10)."""
 
+    substrate: str = "bonded"
+    """Bottom boundary condition. ``"bonded"`` fixes the film to the rigid
+    substrate (``u_r = u_z = 0``); ``"unbonded"`` lets the film slide freely on
+    a rigid, frictionless substrate (``u_z = 0``, ``u_r`` free). A bonded
+    incompressible film is markedly stiffer than an unbonded one, which can
+    shear material out along the substrate."""
+
     # -- material ----------------------------------------------------------
     E: float = 130.0
     """Young's modulus of the film (MPa)."""
@@ -167,6 +174,8 @@ class SimulationConfig:
                 )
         if self.formulation not in ("primal", "mixed"):
             raise ValueError("formulation must be 'primal' or 'mixed'")
+        if self.substrate not in ("bonded", "unbonded"):
+            raise ValueError("substrate must be 'bonded' or 'unbonded'")
 
         if self.n_steps < 1:
             raise ValueError(f"n_steps must be >= 1, got {self.n_steps}")
