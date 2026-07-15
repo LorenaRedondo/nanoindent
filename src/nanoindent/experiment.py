@@ -436,6 +436,12 @@ def read_jpk_map(
             raise ValueError("JPK map missing height/deflection channels")
         h_idx = chan_lcd[height_chan]
         d_idx = chan_lcd[deflection_channel]
+        # The capacitive/measured-height sensor (if distinct) gives a more
+        # accurate absolute height for the contact-to-substrate thickness.
+        measured_chan = next((c for c in ("measuredHeight",
+                                          "capacitiveSensorHeight")
+                              if c in chan_lcd and c != height_chan), None)
+        m_idx = chan_lcd.get(measured_chan) if measured_chan else None
 
         # spring constant (force conversion multiplier) and InvOLS (distance).
         k = _first_float(shared,
@@ -457,10 +463,17 @@ def read_jpk_map(
             rd = np.frombuffer(zf.read(draw), dtype=">i4").astype(float)
             z_m = _jpk_lcd_convert(rh, shared, h_idx, target="nominal")
             defl_m = _jpk_lcd_convert(rd, shared, d_idx, target="distance")
+            meta = {"pixel": i}
+            if m_idx is not None:
+                mraw = seg + f"{measured_chan}.dat"
+                if mraw in names:
+                    rm = np.frombuffer(zf.read(mraw), dtype=">i4").astype(float)
+                    meta["measured_z_nm"] = (
+                        _jpk_lcd_convert(rm, shared, m_idx, target="nominal") * 1e9)
             curves.append(ForceCurveData(
                 z=z_m * 1e9, deflection=defl_m * 1e9, deflection_unit="nm",
                 spring_constant=k, inv_ols=inv_ols, segment="approach",
-                metadata={"pixel": i}, source=path, fmt="jpk-map",
+                metadata=meta, source=path, fmt="jpk-map",
             ))
 
     n = len(curves)

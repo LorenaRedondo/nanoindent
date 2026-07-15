@@ -33,11 +33,17 @@ MODEL_LABELS = {
 class CurveResult:
     pixel: int
     breakthrough_force: Optional[float]      # pN
-    height: Optional[float]                  # nm (penetration step)
+    height: Optional[float]                  # nm — breakthrough step (definition B)
     contact_z: Optional[float]               # nm
     moduli: dict = field(default_factory=dict)   # model -> E (MPa)
     delta: Optional[np.ndarray] = None       # elastic-region indentation (nm)
     force: Optional[np.ndarray] = None       # elastic-region force (pN)
+    height_contact_substrate: Optional[float] = None  # nm — contact->substrate (A)
+
+    @property
+    def height_step(self) -> Optional[float]:
+        """Alias for the breakthrough-step height (definition B)."""
+        return self.height
 
 
 @dataclass
@@ -53,7 +59,14 @@ class SLBAnalysis:
                          if r.breakthrough_force is not None]) / 1e3  # nN
 
     def heights(self) -> np.ndarray:
+        """Breakthrough-step heights, definition B (nm)."""
         return np.array([r.height for r in self.results if r.height is not None])
+
+    def heights_contact_substrate(self) -> np.ndarray:
+        """Contact-point-to-substrate heights, definition A (nm), from the
+        measured-height (capacitive) channel."""
+        return np.array([r.height_contact_substrate for r in self.results
+                         if r.height_contact_substrate is not None])
 
     def moduli(self, model: str) -> np.ndarray:
         return np.array([r.moduli.get(model) for r in self.results
@@ -66,7 +79,8 @@ class SLBAnalysis:
                         median=float(np.median(a)) if a.size else float("nan"),
                         std=float(np.std(a)) if a.size else float("nan"))
         out = {"breakthrough_force_nN": stat(self.breakthrough_forces()),
-               "height_nm": stat(self.heights())}
+               "height_step_nm": stat(self.heights()),
+               "height_contact_substrate_nm": stat(self.heights_contact_substrate())}
         for m in MODULUS_MODELS:
             out[f"E_{m}_MPa"] = stat(self.moduli(m))
         return out
@@ -135,10 +149,26 @@ def process_curve(curve, R: float, nu: float, pixel: int = 0,
     if drop < min_drop_pN:
         return empty
     Fb = float(force[bi])
-    # penetration step ~ jump in indentation across the snap-through
+    # (B) penetration step ~ jump in indentation across the snap-through
     height = float(delta[min(bi + 1, len(delta) - 1)] - delta[bi])
     if not (0.3 < height < 15.0):
         height = float(d_rel[bi] - d_rel[min(bi + 1, len(d_rel) - 1)])
+
+    # (A) contact-point -> substrate height, on the measured-height (capacitive)
+    # channel: distance from the bilayer-top contact to where the post-
+    # breakthrough hard wall extrapolates back to zero force.
+    height_cs = None
+    mz_all = curve.metadata.get("measured_z_nm") if hasattr(curve, "metadata") else None
+    mz = np.asarray(mz_all, float)[order] if mz_all is not None else z
+    post = slice(bi + 1, len(mz))
+    if len(mz[post]) >= 4 and np.ptp(mz[post]) > 1e-6:
+        # linear hard wall: force = a*mz + b  (a<0 as mz decreases on approach)
+        a, b = np.polyfit(mz[post], force[post], 1)
+        if a < 0:
+            mz_sub = -b / a                  # measured height at zero force = substrate
+            height_cs = float(mz[ci] - mz_sub)
+            if not (0.0 < height_cs < 60.0):
+                height_cs = None
 
     # elastic (pre-breakthrough) branch, sorted by delta
     sl = slice(ci, bi + 1)
@@ -166,7 +196,8 @@ def process_curve(curve, R: float, nu: float, pixel: int = 0,
             except Exception:
                 pass
 
-    return CurveResult(pixel, Fb, height, zc, moduli, de, fe)
+    return CurveResult(pixel, Fb, height, zc, moduli, de, fe,
+                       height_contact_substrate=height_cs)
 
 
 def analyze_map(fmap, R: float = 20.0, nu: float = 0.5,
@@ -259,6 +290,7 @@ def plot_analysis(analysis: "SLBAnalysis", film_thickness: float = 5.0,
 
     Fb = analysis.breakthrough_forces()
     ht = analysis.heights()
+    ht_cs = analysis.heights_contact_substrate()
     mods = {m: analysis.moduli(m) for m in MODULUS_MODELS}
     colors = {"hertz": "#D55E00", "dimitriadis": "#0072B2",
               "garcia_bec": "#009E73", "chadwick": "#CC79A7"}
@@ -272,10 +304,15 @@ def plot_analysis(analysis: "SLBAnalysis", film_thickness: float = 5.0,
     axs[0, 0].set_xlabel("breakthrough force (nN)"); axs[0, 0].set_ylabel("count")
 
     if ht.size:
-        axs[0, 1].hist(ht, bins=30, color="#56B4E9", edgecolor="k", lw=0.3)
-        axs[0, 1].axvline(np.median(ht), color="crimson", ls="--")
-        axs[0, 1].set_title(f"SLB height (median {np.median(ht):.2f} nm)", fontsize=9)
-    axs[0, 1].set_xlabel("breakthrough step / height (nm)"); axs[0, 1].set_ylabel("count")
+        axs[0, 1].hist(ht, bins=25, color="#56B4E9", edgecolor="k", lw=0.3,
+                       alpha=0.7, label=f"(B) step, med {np.median(ht):.1f} nm")
+    if ht_cs.size:
+        axs[0, 1].hist(ht_cs, bins=25, color="#E69F00", edgecolor="k", lw=0.3,
+                       alpha=0.6,
+                       label=f"(A) contact→substrate, med {np.median(ht_cs):.1f} nm")
+    axs[0, 1].set_title("SLB height", fontsize=9)
+    axs[0, 1].legend(fontsize=6)
+    axs[0, 1].set_xlabel("height (nm)"); axs[0, 1].set_ylabel("count")
 
     data = [mods[m] for m in MODULUS_MODELS if mods[m].size]
     labs = [MODEL_LABELS[m] for m in MODULUS_MODELS if mods[m].size]

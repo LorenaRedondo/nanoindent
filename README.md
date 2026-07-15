@@ -385,8 +385,10 @@ print(an.summary())                 # breakthrough force, height, E per model
 fig = slb.plot_analysis(an)         # 4-panel: distributions + FEM cross-check
 ```
 
-Per curve it extracts the **breakthrough (yield) force**, the **bilayer height**
-(breakthrough step), and the **Young's modulus** fit with **Hertz, Dimitriadis
+Per curve it extracts the **breakthrough (yield) force**, **two bilayer-height
+measures** — (A) contact-point→substrate from the measured-height (capacitive)
+channel, ≈ the true bilayer thickness, and (B) the breakthrough penetration
+step — and the **Young's modulus** fit with **Hertz, Dimitriadis
 2002, Garcia & Garcia 2018, and Chadwick 2002** over a common small-indentation
 window (δ ≲ h, where the finite-thickness corrections are valid), and can run a
 **FEM cross-check** at the fitted modulus. On a real gel-phase SLB map (400
