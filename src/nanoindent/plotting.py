@@ -374,6 +374,88 @@ def plot_model_comparison(cfg, models=None, fem_curve=None,
     return fig
 
 
+_FIELD_LABELS = {
+    "von_mises": "von Mises stress (MPa)",
+    "sigma_zz": r"$\sigma_{zz}$ (MPa)",
+    "pressure": "pressure (MPa)",
+    "displacement": "|displacement| (nm)",
+    "uz": r"$u_z$ (nm)",
+    "ur": r"$u_r$ (nm)",
+}
+
+
+def plot_field(solver, field: str = "von_mises", step_delta=None,
+               mirror: bool = True, deformed: bool = False,
+               disp_scale: float = 1.0, cmap: str = "viridis",
+               levels: int = 24, width: float = SINGLE_COLUMN, ax=None,
+               show_mesh: bool = False, show_tip: bool = True):
+    """Heatmap of an FEM field over the axisymmetric (r, z) cross-section.
+
+    Parameters
+    ----------
+    solver:
+        An :class:`~nanoindent.IndentationSolver` that has been ``run()``.
+    field:
+        Field name understood by ``solver.nodal_field`` (``"von_mises"``,
+        ``"sigma_zz"``, ``"pressure"``, ``"displacement"``, ``"uz"``, ``"ur"``).
+    mirror:
+        Mirror the half-domain across the axis ``r = 0`` to show the full
+        cross-section (axisymmetric).
+    deformed:
+        Warp the mesh by the displacement (times ``disp_scale``).
+    show_tip:
+        Overlay the rigid indenter outline at the final indentation.
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.tri as mtri
+
+    if ax is None:
+        fig, axes = _new_fig(width, width * 0.7)
+        ax = axes[0, 0]
+    else:
+        fig = ax.figure
+
+    mesh = solver.domain.mesh
+    vals = solver.nodal_field(field)
+    r = mesh.p[0].copy()
+    z = mesh.p[1].copy()
+    if deformed:
+        ur, uz = solver.nodal_displacement()
+        r = r + disp_scale * ur
+        z = z + disp_scale * uz
+    tris = mesh.t.T
+
+    def _draw(rr, vv):
+        triang = mtri.Triangulation(rr, z, tris)
+        tcf = ax.tricontourf(triang, vv, levels=levels, cmap=cmap)
+        if show_mesh:
+            ax.triplot(triang, color="k", lw=0.15, alpha=0.3)
+        return tcf
+
+    tcf = _draw(r, vals)
+    if mirror:
+        _draw(-r, vals)
+
+    # Rigid tip outline at the final indentation depth.
+    if show_tip and getattr(solver, "_last_u", None) is not None:
+        cfg = solver.cfg
+        delta = cfg.delta_max if step_delta is None else step_delta
+        rr = np.linspace(-cfg.L * 0.6, cfg.L * 0.6, 400)
+        ztip = solver.tip.surface_z(np.abs(rr), delta)
+        finite = np.isfinite(ztip)
+        ax.plot(rr[finite], ztip[finite], color="crimson", lw=1.2, zorder=5)
+
+    cbar = fig.colorbar(tcf, ax=ax, fraction=0.046, pad=0.03)
+    cbar.set_label(_FIELD_LABELS.get(field, field), fontsize=8)
+    ax.set_xlabel("r (nm)")
+    ax.set_ylabel("z (nm)")
+    ax.set_aspect("equal")
+    ax.set_title(f"{field.replace('_', ' ')}"
+                 + (f"  ($\\delta$={solver.cfg.delta_max:g} nm, "
+                    f"h={solver.cfg.h:g} nm)"), fontsize=8)
+    return fig
+
+
 def plot_convergence(records: Sequence["ConvergenceRecord"],
                      width: float = SINGLE_COLUMN, ax=None):
     """Plot a convergence study: force at delta_max vs. the swept parameter."""

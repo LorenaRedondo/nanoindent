@@ -101,6 +101,7 @@ python examples/synthetic_analysis.py           # realistic dataset -> modulus r
 python examples/publication_figure.py           # journal-ready multi-panel figure (PDF/PNG/SVG)
 python examples/model_comparison.py              # Hertz/Garcia/Dimitriadis/Chadwick vs FEM
 python examples/chadwick_verification.py         # incompressible (nu=0.5) mixed FEM -> Chadwick
+python examples/field_heatmap.py                 # von Mises / displacement field heatmaps
 ```
 
 ### Publication-quality figures
@@ -126,8 +127,30 @@ plotting.save_figure(fig, "figures/fig2", formats=("pdf", "png", "svg"))
 Add a journal by dropping an entry in `plotting.JOURNAL_PRESETS`.
 
 Available plotters: `plot_force_curves`, `plot_stiffening_ratio`,
-`plot_modulus_recovery`, `plot_convergence`, plus `save_figure` (multi-format)
-and the `SINGLE_COLUMN` / `DOUBLE_COLUMN` width constants.
+`plot_modulus_recovery`, `plot_model_comparison`, `plot_convergence`,
+`plot_field` (field heatmaps), plus `save_figure` (multi-format) and the
+`SINGLE_COLUMN` / `DOUBLE_COLUMN` width constants.
+
+### Field heatmaps
+
+`plot_field` renders any recovered field over the axisymmetric (r, z)
+cross-section — von Mises stress, `sigma_zz`, mechanical `pressure`,
+displacement magnitude, `uz`, `ur` — mirrored across the axis with the rigid
+tip outline overlaid. Fields are L2-projected to the mesh vertices via
+`solver.nodal_field(name)`.
+
+```python
+solver = IndentationSolver(cfg); solver.run()
+plotting.plot_field(solver, field="von_mises")            # heatmap
+plotting.plot_field(solver, field="uz", cmap="RdBu_r", deformed=True)
+vm = solver.nodal_field("von_mises")                      # raw nodal values
+```
+
+![field heatmap](docs/field_heatmap.png)
+
+*`examples/field_heatmap.py`: von Mises stress concentrates under the tip
+(~21 MPa at h=7 nm, δ=1 nm) while u_z reaches −δ at the apex and 0 at the
+bonded substrate.*
 
 ---
 

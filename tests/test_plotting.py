@@ -85,6 +85,31 @@ def test_plot_modulus_recovery_runs():
     assert len(fig.axes[0].patches) == 4  # 2 thicknesses x 2 models
 
 
+def test_nodal_field_and_heatmap(tmp_path):
+    # Small real run so the field recovery + heatmap exercise the solver.
+    import warnings
+    from nanoindent import IndentationSolver
+    cfg = SimulationConfig(h=14.0, L=40.0, nu=0.3, n_steps=3, delta_max=1.0,
+                           mesh_size_contact=0.6, mesh_size_edge=8.0,
+                           penalty_alpha=300.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        solver = IndentationSolver(cfg)
+        solver.run()
+
+    vm = solver.nodal_field("von_mises")
+    assert vm.shape[0] == solver.domain.mesh.p.shape[1]
+    assert np.all(vm >= -1e-9) and vm.max() > 0     # von Mises is non-negative
+    uz = solver.nodal_field("uz")
+    assert uz.min() < 0                              # surface pushed down
+
+    fig = plotting.plot_field(solver, field="von_mises", mirror=True)
+    assert len(fig.axes) >= 1
+    paths = plotting.save_figure(fig, str(tmp_path / "field"), formats=("png",))
+    import os
+    assert os.path.exists(paths[0])
+
+
 def test_save_figure_writes_files(tmp_path):
     curves = {7.0: _fake_curve(7.0)}
     fig = plotting.plot_force_curves(curves, compare=["hertz"])

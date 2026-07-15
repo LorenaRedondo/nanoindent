@@ -380,6 +380,84 @@ class IndentationSolver:
         pen = pen[np.isfinite(pen)]
         return float(np.max(pen)) if pen.size else 0.0
 
+    # -- field recovery ----------------------------------------------------
+    def nodal_field(self, name: str = "von_mises", u: Optional[np.ndarray] = None):
+        """Return a scalar field sampled at the mesh vertices (for heatmaps).
+
+        The field is recovered from the converged solution by an L2 projection
+        onto continuous P1 (so it aligns with ``self.domain.mesh.p``).
+
+        Supported ``name`` values: ``"von_mises"``, ``"sigma_zz"``,
+        ``"pressure"`` (mechanical, ``-tr(sigma)/3``), ``"displacement"``
+        (magnitude), ``"uz"``, ``"ur"``. Stresses are in MPa, displacements nm.
+        """
+        from skfem import ElementTriP1, solve as sksolve
+
+        if u is None:
+            u = getattr(self, "_last_u", None)
+        if u is None:
+            raise RuntimeError("run() the solver before requesting fields")
+
+        mesh = self.domain.mesh
+        io = 4
+        p1 = Basis(mesh, ElementTriP1(), intorder=io)
+        ub = Basis(mesh, self.basis.elem, intorder=io)
+        uh = ub.interpolate(u)
+        mu = self._mu
+        mixed = self.mixed
+        C = None if mixed else self.material.constitutive_matrix()
+        ph = None
+        if mixed:
+            pb = Basis(mesh, self.basis_p.elem, intorder=io)
+            ph = pb.interpolate(self._p)
+
+        @BilinearForm
+        def mass(a, b, w):
+            return a * b * w.x[0]
+
+        @LinearForm
+        def load(v, w):
+            r = w.x[0]
+            U = w["u"]
+            e_rr = U.grad[0][0]; e_zz = U.grad[1][1]
+            e_tt = U[0] / r;     g_rz = U.grad[0][1] + U.grad[1][0]
+            if mixed:
+                pp = w["p"]
+                s_rr = 2 * mu * e_rr + pp; s_zz = 2 * mu * e_zz + pp
+                s_tt = 2 * mu * e_tt + pp; s_rz = mu * g_rz
+            else:
+                s_rr = C[0, 0] * e_rr + C[0, 1] * e_zz + C[0, 2] * e_tt
+                s_zz = C[1, 0] * e_rr + C[1, 1] * e_zz + C[1, 2] * e_tt
+                s_tt = C[2, 0] * e_rr + C[2, 1] * e_zz + C[2, 2] * e_tt
+                s_rz = C[3, 3] * g_rz
+            if name == "von_mises":
+                f = np.sqrt(0.5 * ((s_rr - s_zz) ** 2 + (s_zz - s_tt) ** 2
+                                   + (s_tt - s_rr) ** 2) + 3 * s_rz ** 2)
+            elif name == "sigma_zz":
+                f = s_zz
+            elif name == "pressure":
+                f = -(s_rr + s_zz + s_tt) / 3.0
+            elif name == "uz":
+                f = U[1]
+            elif name == "ur":
+                f = U[0]
+            elif name == "displacement":
+                f = np.sqrt(U[0] ** 2 + U[1] ** 2)
+            else:
+                raise ValueError(f"unknown field {name!r}")
+            return f * v * r
+
+        M = mass.assemble(p1)
+        kwargs = {"u": uh}
+        if mixed:
+            kwargs["p"] = ph
+        b = load.assemble(p1, **kwargs)
+        return sksolve(M, b)
+
+    def nodal_displacement(self, u: Optional[np.ndarray] = None):
+        """Return (ur, uz) at the mesh vertices (nm), for deformed-shape plots."""
+        return self.nodal_field("ur", u), self.nodal_field("uz", u)
+
     # -- driver ------------------------------------------------------------
     def run(self) -> ForceCurve:
         """Run the full load-stepping simulation and return a ForceCurve."""
