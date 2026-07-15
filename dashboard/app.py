@@ -207,7 +207,10 @@ def slb_page():
     m = st.columns(4)
     m[0].metric("Breakthrough force",
                 f"{s['breakthrough_force_nN']['median']:.1f} nN")
-    m[1].metric("Bilayer height", f"{s['height_nm']['median']:.2f} nm")
+    m[1].metric("Height contact→substrate",
+                f"{s['height_contact_substrate_nm']['median']:.2f} nm",
+                help="Bilayer thickness from the measured-height channel; the "
+                     "breakthrough step is in the summary table below.")
     m[2].metric("E (Hertz)", f"{s['E_hertz_MPa']['median']:.1f} MPa")
     m[3].metric("E (Dimitriadis)", f"{s['E_dimitriadis_MPa']['median']:.1f} MPa")
 

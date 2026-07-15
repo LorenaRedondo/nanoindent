@@ -31,11 +31,18 @@ lcd-info.1.conversion-set.conversion.distance.scaling.offset=0.0
 lcd-info.1.conversion-set.conversion.force.base-calibration-slot=distance
 lcd-info.1.conversion-set.conversion.force.scaling.multiplier=0.6
 lcd-info.1.conversion-set.conversion.force.scaling.offset=0.0
+lcd-info.2.encoder.scaling.multiplier=1.0
+lcd-info.2.encoder.scaling.offset=0.0
+lcd-info.2.conversion-set.conversions.base=volts
+lcd-info.2.conversion-set.conversion.nominal.base-calibration-slot=volts
+lcd-info.2.conversion-set.conversion.nominal.scaling.multiplier=1e-9
+lcd-info.2.conversion-set.conversion.nominal.scaling.offset=0.0
 """
 
-_SEGHDR = ("channels.list=height vDeflection\n"
+_SEGHDR = ("channels.list=height vDeflection measuredHeight\n"
            "channel.height.lcd-info.*=0\n"
-           "channel.vDeflection.lcd-info.*=1\n")
+           "channel.vDeflection.lcd-info.*=1\n"
+           "channel.measuredHeight.lcd-info.*=2\n")
 
 
 def _synthetic_curve(z_contact=150.0, elastic_slope=0.5, break_travel=30.0,
@@ -63,6 +70,8 @@ def _make_jpk_map(path, n_pixels=4):
                         np.round(z).astype(">i4").tobytes())
             zf.writestr(seg + "channels/vDeflection.dat",
                         np.round(defl).astype(">i4").tobytes())
+            zf.writestr(seg + "channels/measuredHeight.dat",
+                        np.round(z).astype(">i4").tobytes())
 
 
 def test_read_jpk_map_calibration(tmp_path):
@@ -85,7 +94,8 @@ def test_slb_process_curve_finds_breakthrough(tmp_path):
     r = slb.process_curve(fmap[0], R=20.0, nu=0.5, film_thickness=5.0,
                           fit_max_delta=3.0)
     assert r.breakthrough_force is not None and r.breakthrough_force > 0
-    assert r.height is not None
+    assert r.height is not None                  # breakthrough step (B)
+    assert r.height_contact_substrate is not None and r.height_contact_substrate > 0  # (A)
     # moduli fitted for every model
     for m in slb.MODULUS_MODELS:
         assert m in r.moduli and r.moduli[m] > 0
@@ -98,7 +108,8 @@ def test_slb_analyze_map_distributions(tmp_path):
                          film_thickness=5.0, fit_max_delta=3.0)
     s = an.summary()
     assert s["breakthrough_force_nN"]["n"] >= 3
-    assert s["height_nm"]["median"] > 0
+    assert s["height_step_nm"]["median"] > 0
+    assert s["height_contact_substrate_nm"]["n"] >= 3
     for m in slb.MODULUS_MODELS:
         assert s[f"E_{m}_MPa"]["n"] >= 3
     # apparent Hertz modulus exceeds the bottom-effect-corrected ones
