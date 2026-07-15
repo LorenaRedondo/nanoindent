@@ -199,6 +199,23 @@ Each shape is validated against its analytic law in the thick-film limit
 cone reproduces its δ² force law; the blunted cone reduces to the sphere while
 contact stays on the spherical cap and stiffens toward the cone beyond it.
 
+## Web dashboard
+
+An interactive Streamlit app drives the whole library from a browser — set the
+tip, sample, substrate, and mesh from the sidebar and get the force–indentation
+curve (with analytic overlays), the von Mises / displacement / pressure field
+heatmap, solution diagnostics, and a modulus fit, all from the real solver:
+
+```bash
+pip install -e ".[web]"
+streamlit run dashboard/app.py
+```
+
+Incompressible samples (ν ≥ 0.45) automatically switch to the locking-free
+mixed formulation; results and the F(δ) CSV are downloadable. To share it,
+deploy `dashboard/app.py` to Streamlit Community Cloud (or any host that can run
+a Python process).
+
 ## Units
 
 A single consistent system is used everywhere:
