@@ -518,6 +518,35 @@ AsylumAdapter(bridge=my_igor_socket_bridge)    # Igor listener bridge
 **Safety** (unchanged): these adapters carry *supervisory* commands only; the
 fast tip-protection z-feedback stays on the instrument's own controller.
 
+#### Asylum Research — deepened (Igor Pro listener bridge)
+
+Asylum runs inside **Igor Pro** with no Python API, so the adapter speaks *Igor
+command strings* to an **Igor-side listener** over a bridge. `MockIgorBridge`
+(in-process) and `SocketIgorBridge` (TCP) implement one command grammar;
+`IgorListenerServer` is a faithful loopback mock, and
+**`docs/asylum_igor_listener.ipf`** is a reference Igor procedure implementing
+the listener — the concrete thing you drop into your Asylum experiment.
+
+```python
+from nanoindent.adapters import AsylumAdapter, SocketIgorBridge
+with AsylumAdapter(SocketIgorBridge("192.168.1.20", 55070), record_ramps=True) as ad:
+    caps = ad.capabilities        # pixel size / fps from ScanSize / PointsLines / ScanRate
+    ad.engage()                   # EXEC Approach()
+    ad.set_setpoint(0.3); ad.set_feedback_gains(0.5, 120.0)
+    run_control_loop(ad, an, combine_policies(recenter_on_brightest(), ramp_on_event()))
+    for fc in ad.force_curves:    # single-force F–d curves from events
+        print(fc.max_force_pN)
+    ad.withdraw()                 # EXEC Withdraw()
+```
+
+Capability read-back, engage/withdraw, feedback + operating mode, and force
+spectroscopy are exercised end-to-end — including the **closed loop over real TCP**
+to the loopback Igor listener (`examples/asylum_live_session.py`). ⚠️ The Asylum
+Igor function/parameter names (`SetScanOffset`, `PV("SetpointDefl", …)`,
+`Approach`/`Withdraw`, …) are `VERIFY` placeholders — substitute the exact names
+from the Asylum Programmer's Guide in the `.ipf`; the Python side and transport
+are done.
+
 #### Nanosurf — deepened (models the real `nanosurf` package)
 
 Nanosurf's Python package is public, so the adapter models the real object tree
@@ -682,7 +711,8 @@ examples/
 ├── hsafm_video.py              ├── streaming_control.py
 ├── instrument_adapters.py      ├── jpk_live_session.py
 ├── jpk_versions.py             ├── nanosurf_live_session.py
-├── model_slides.py             └── (msnl_bio_dc case study)
+├── asylum_live_session.py      ├── model_slides.py
+└── (msnl_bio_dc case study)
 tests/               # unit + physics-validation (slow) suites
 ```
 
