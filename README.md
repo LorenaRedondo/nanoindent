@@ -636,6 +636,52 @@ proven end-to-end (a fictional distinct grammar drives the full closed loop over
 TCP in the tests). See `examples/jpk_versions.py`. Only a dialect confirmed
 against real hardware should be marked `verified=True`.
 
+### Deploying the loop: directory source, safety envelope, recorder, CLI
+
+The vendor adapters need an SDK; `nanoindent.sources`, `nanoindent.safety`,
+`nanoindent.recording` and `nanoindent.control` make the loop **usable on any
+instrument today** and safe to run.
+
+- **`DirectoryWatchSource`** — a `FrameSource` that reads frames from files as the
+  microscope writes them to a folder (`.npy` / `.npz` / TIFF / CSV). No SDK, no
+  wire protocol; batch an existing folder or `watch=True` for near-realtime. A
+  `command_dir` lets it drive a file-bridged instrument. `RetryFrameSource` wraps
+  a socket source with connect/stream reconnect.
+- **`SafetyEnvelope`** — wraps a policy with guards: command **rate limiting**,
+  **scan-bounds** clip (the loop can't walk the scan off the sample), **setpoint**
+  clamp, **auto-pause on lost tracking** (+ resume), and a **frame-gap watchdog**.
+  Supervisory only — fast tip protection stays on the instrument controller.
+- **`RunRecorder`** — writes frames, per-frame analysis (`stats.csv`), commands
+  and events (`.jsonl`), timings, and a `manifest.json` for every run.
+- **`nanoindent-control`** (`python -m nanoindent.control`) — a config-driven CLI
+  that wires source + analyzer + policy + safety + recorder together.
+
+```python
+from nanoindent import (DirectoryWatchSource, SafetyEnvelope, SafetyLimits,
+                        RunRecorder, StreamingAnalyzer, run_control_loop,
+                        recenter_on_brightest, combine_policies, ramp_on_event)
+source = DirectoryWatchSource("scan_out", pattern="frame_*.npy",
+                             pixel_size_nm=2.0, frame_interval_s=0.05)
+env = SafetyEnvelope(SafetyLimits(min_frames_between_commands=2,
+                                  max_scan_offset_px=24.0, setpoint_range=(0.1, 1.0),
+                                  pause_after_lost_frames=5))
+rec = RunRecorder("runs/live", save_frames=True)
+an = StreamingAnalyzer(source.pixel_size_nm, source.frame_interval_s)
+rep = run_control_loop(rec.wrap(source), an,
+                       env.guard(combine_policies(recenter_on_brightest(), ramp_on_event())),
+                       on_state=rec.on_state)
+rec.save(rep)          # stats.csv, commands.jsonl, events.jsonl, timings.csv, manifest.json
+```
+
+```bash
+python -m nanoindent.control --source directory --dir scan_out --pattern "frame_*.npy" \
+    --pixel-size 2.0 --dt 0.05 --outdir runs/live \
+    --max-scan-offset-px 24 --pause-after-lost 5
+```
+
+`examples/deploy_control.py` runs the whole thing on a synthetic movie written to
+disk (the safety guards fire — ~44 rate-limited, ~37 bounds-clipped over 80 frames).
+
 ### Synthetic data & inverse analysis (end-to-end double-check)
 
 `nanoindent.dataset` closes the loop: it generates a **realistic AFM force
@@ -700,7 +746,11 @@ src/nanoindent/
 ├── slb.py          # supported-lipid-bilayer force-map analysis (breakthrough, κ_A, E)
 ├── video.py        # HS-AFM movies: readers, drift, tracking, diffusion, events
 ├── streaming.py    # online analyzer + simulated instrument + closed-loop control
-├── adapters/       # vendor FrameSource adapters (Nanosurf / JPK / Asylum scaffolds)
+├── adapters/       # vendor FrameSource adapters (Nanosurf / JPK / Asylum)
+├── sources.py      # directory-watch source + reconnecting source (any instrument)
+├── safety.py       # safety envelope: rate limit, scan bounds, setpoint, watchdog
+├── recording.py    # run recorder (frames / analysis / commands / events → disk)
+├── control.py      # config-driven control-loop CLI (nanoindent-control)
 └── plotting.py     # publication-quality figures (vector output, CB-safe)
 examples/
 ├── paper_reproduction.py       ├── model_comparison.py
@@ -711,8 +761,8 @@ examples/
 ├── hsafm_video.py              ├── streaming_control.py
 ├── instrument_adapters.py      ├── jpk_live_session.py
 ├── jpk_versions.py             ├── nanosurf_live_session.py
-├── asylum_live_session.py      ├── model_slides.py
-└── (msnl_bio_dc case study)
+├── asylum_live_session.py      ├── deploy_control.py
+├── model_slides.py             └── (msnl_bio_dc case study)
 tests/               # unit + physics-validation (slow) suites
 ```
 
