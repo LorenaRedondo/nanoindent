@@ -518,6 +518,32 @@ AsylumAdapter(bridge=my_igor_socket_bridge)    # Igor listener bridge
 **Safety** (unchanged): these adapters carry *supervisory* commands only; the
 fast tip-protection z-feedback stays on the instrument's own controller.
 
+#### Nanosurf — deepened (models the real `nanosurf` package)
+
+Nanosurf's Python package is public, so the adapter models the real object tree
+(`application.Scan` / `ZController` / `OperatingMode` / `Approach` / `Spec`) and
+the exact in-process calls a real session makes:
+
+```python
+import nanosurf
+from nanoindent.adapters import NanosurfAdapter
+with NanosurfAdapter(nanosurf.SPM(), record_ramps=True) as ad:   # CoreAFM/DriveAFM/…
+    caps = ad.capabilities             # pixel size / fps read from scan geometry
+    ad.engage()                        # Approach.StartApproach()
+    ad.set_setpoint(0.3); ad.set_feedback_gains(0.5, 120.0)
+    run_control_loop(ad, an, combine_policies(recenter_on_brightest(), ramp_on_event()))
+    for fc in ad.force_curves:         # Spec force–distance curves from events
+        print(fc.max_force_pN)
+    ad.withdraw()                      # Approach.StartWithdraw()
+```
+
+Capability read-back (from `ImageWidth`/`Points`/`Scantime`/`Lines`), approach /
+engage state machine, feedback setpoint + gains, operating mode, and force–distance
+spectroscopy are all exercised against `MockNanosurfSPM` (`examples/nanosurf_live_session.py`).
+The names track the Nanosurf scripting reference; the frame-buffer read is marked
+`VERIFY` (event-driven on real hardware). Being in-process there is no wire
+protocol — swap `MockNanosurfSPM` for `nanosurf.SPM()` to go live.
+
 #### JPK / Bruker BioAFM — deepened toward a live connection
 
 The JPK adapter goes past the scaffold: it models a realistic live session, all
@@ -655,8 +681,8 @@ examples/
 ├── msnl_bio_dc.py              ├── slb_force_map.py
 ├── hsafm_video.py              ├── streaming_control.py
 ├── instrument_adapters.py      ├── jpk_live_session.py
-├── jpk_versions.py             ├── model_slides.py
-└── (msnl_bio_dc case study)
+├── jpk_versions.py             ├── nanosurf_live_session.py
+├── model_slides.py             └── (msnl_bio_dc case study)
 tests/               # unit + physics-validation (slow) suites
 ```
 
