@@ -58,6 +58,8 @@ from . import safety
 from .safety import SafetyEnvelope, SafetyLimits
 from . import tracking
 from .tracking import ExperimentIndex, log_run_to_mlflow, load_manifest
+from . import replay
+from .replay import RecordedRun, load_run
 from . import control
 from . import plotting
 
@@ -149,6 +151,9 @@ __all__ = [
     "ExperimentIndex",
     "log_run_to_mlflow",
     "load_manifest",
+    "replay",
+    "RecordedRun",
+    "load_run",
     "control",
     "plotting",
     "synthetic_force_curve",

@@ -713,6 +713,24 @@ log_run_to_mlflow("runs/r1", experiment="afm-control")   # or: nanoindent-runs r
 `examples/experiment_tracking.py` sweeps a few settings and prints the comparison
 table (recovered diffusion, real-time factor, guard counts per run).
 
+#### Replaying a recorded run
+
+`load_run` reads a recorder directory back into a `RecordedRun` — the read side of
+the recorder — so a finished session can be re-examined without re-running the loop:
+
+```python
+from nanoindent import load_run
+run = load_run("runs/r1")
+run.plot_summary()          # per-frame stats, command/event timeline, timings
+vid = run.to_video()        # frames back as an AFMVideo for further analysis
+run.animate("runs/r1/replay.mp4")
+```
+
+The dashboard's **Run browser** page does this interactively: point it at a runs
+folder, compare all runs in a table (with a comparison-CSV download), then drill
+into one to replay its stats, commands, events, and frames
+(`examples/replay_run.py`).
+
 ### Synthetic data & inverse analysis (end-to-end double-check)
 
 `nanoindent.dataset` closes the loop: it generates a **realistic AFM force
@@ -782,6 +800,7 @@ src/nanoindent/
 ├── safety.py       # safety envelope: rate limit, scan bounds, setpoint, watchdog
 ├── recording.py    # run recorder (frames / analysis / commands / events, timestamps)
 ├── tracking.py     # experiment index + comparison CSV + optional MLflow export
+├── replay.py       # reload a recorded run: stats / commands / events / frames
 ├── control.py      # config-driven control-loop CLI (nanoindent-control / -runs)
 └── plotting.py     # publication-quality figures (vector output, CB-safe)
 examples/
@@ -794,8 +813,8 @@ examples/
 ├── instrument_adapters.py      ├── jpk_live_session.py
 ├── jpk_versions.py             ├── nanosurf_live_session.py
 ├── asylum_live_session.py      ├── deploy_control.py
-├── experiment_tracking.py      ├── model_slides.py
-└── (msnl_bio_dc case study)
+├── experiment_tracking.py      ├── replay_run.py
+├── model_slides.py             └── (msnl_bio_dc case study)
 tests/               # unit + physics-validation (slow) suites
 ```
 

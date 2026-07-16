@@ -30,7 +30,7 @@ import streamlit as st
 
 from nanoindent import (
     SimulationConfig, IndentationSolver, analytics, fit_modulus,
-    read_jpk_map, slb, video as hsvideo, streaming,
+    read_jpk_map, slb, video as hsvideo, streaming, ExperimentIndex, load_run,
 )
 from nanoindent.contact import make_tip
 
@@ -456,10 +456,78 @@ def control_page():
 
 
 # ==========================================================================
+# Run browser page — compare & replay recorded control runs
+# ==========================================================================
+def run_browser_page():
+    st.title("📁 Run browser")
+    st.caption("Point at a folder of recorded runs (a `RunRecorder` output tree). "
+               "Compare them in a table, then drill into one to replay its "
+               "per-frame stats, commands, events, and frames.")
+
+    root = st.text_input("Runs directory", value="runs")
+    if not os.path.isdir(root):
+        st.info(f"Directory `{root}` not found. Record runs with "
+                "`nanoindent-control … --outdir runs/<name>` (or the Python API), "
+                "then set the folder here.")
+        return
+
+    idx = ExperimentIndex(root)
+    if len(idx) == 0:
+        st.warning(f"No run manifests found under `{root}`.")
+        return
+
+    st.subheader(f"{len(idx)} run(s)")
+    rows = idx.rows()
+    metric_cols = [c for c in idx.columns() if c.startswith("metrics.")][:6]
+    show = ["run_id", "started_at"] + [c for c in idx.columns()
+                                       if c.startswith("tags.")][:3] + metric_cols
+    st.dataframe({c.split(".")[-1]: [f"{r.get(c, '')}" for r in rows] for c in show})
+    st.download_button("⬇ Comparison CSV",
+                       "\n".join([",".join(idx.columns())] +
+                                 [",".join(f"{r.get(c, '')}" for c in idx.columns())
+                                  for r in rows]),
+                       "comparison.csv", "text/csv")
+
+    st.markdown("---")
+    run_ids = [r["run_id"] for r in rows]
+    chosen = st.selectbox("Replay a run", run_ids)
+    man = next(m for m in idx.manifests() if m.get("run_id") == chosen)
+    try:
+        run = load_run(man["outdir"])
+    except Exception as exc:
+        st.error(f"Could not load run: {exc}"); return
+
+    c = st.columns(4)
+    c[0].metric("Frames", run.n_frames)
+    c[1].metric("Commands", len(run.commands))
+    c[2].metric("Events", len(run.events))
+    rtf = run.metrics.get("real_time_factor")
+    c[3].metric("Real-time factor", f"{rtf:.2f}×" if rtf is not None else "—")
+
+    with st.expander("Params / metrics / tags"):
+        st.json({"params": run.params, "metrics": run.metrics, "tags": run.tags})
+
+    st.subheader("Replay summary")
+    with st.spinner("Rendering recorded run…"):
+        st.pyplot(run.plot_summary())
+
+    if run.frames is not None:
+        st.subheader("Recorded frames")
+        t = st.slider("Frame", 0, run.n_frames - 1, 0)
+        figf, axf = plt.subplots(figsize=(4.5, 4.2))
+        axf.imshow(run.frames[t], cmap="afmhot", origin="lower")
+        axf.set_title(f"frame {t}", fontsize=9)
+        axf.set_xlabel("x (px)"); axf.set_ylabel("y (px)")
+        st.pyplot(figf)
+    else:
+        st.caption("This run was recorded without frames (`save_frames=False`).")
+
+
+# ==========================================================================
 PAGE = st.sidebar.radio(
     "Page",
     ["FEM simulation", "SLB force-map analysis", "HS-AFM movie analysis",
-     "Live control (simulated)"])
+     "Live control (simulated)", "Run browser"])
 st.sidebar.markdown("---")
 if PAGE == "FEM simulation":
     fem_page()
@@ -467,5 +535,7 @@ elif PAGE == "SLB force-map analysis":
     slb_page()
 elif PAGE == "HS-AFM movie analysis":
     hsafm_page()
-else:
+elif PAGE == "Live control (simulated)":
     control_page()
+else:
+    run_browser_page()
