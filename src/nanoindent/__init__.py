@@ -50,6 +50,13 @@ from .adapters import (
     InstrumentAdapter, BackendSimulator, NanosurfAdapter, JPKAdapter,
     AsylumAdapter,
 )
+from . import sources
+from .sources import DirectoryWatchSource, RetryFrameSource, read_frame_file
+from . import recording
+from .recording import RunRecorder, RecordingSource
+from . import safety
+from .safety import SafetyEnvelope, SafetyLimits
+from . import control
 from . import plotting
 
 __all__ = [
@@ -125,6 +132,17 @@ __all__ = [
     "NanosurfAdapter",
     "JPKAdapter",
     "AsylumAdapter",
+    "sources",
+    "DirectoryWatchSource",
+    "RetryFrameSource",
+    "read_frame_file",
+    "recording",
+    "RunRecorder",
+    "RecordingSource",
+    "safety",
+    "SafetyEnvelope",
+    "SafetyLimits",
+    "control",
     "plotting",
     "synthetic_force_curve",
     "fit_modulus",
