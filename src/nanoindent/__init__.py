@@ -53,9 +53,11 @@ from .adapters import (
 from . import sources
 from .sources import DirectoryWatchSource, RetryFrameSource, read_frame_file
 from . import recording
-from .recording import RunRecorder, RecordingSource
+from .recording import RunRecorder, RecordingSource, make_run_id
 from . import safety
 from .safety import SafetyEnvelope, SafetyLimits
+from . import tracking
+from .tracking import ExperimentIndex, log_run_to_mlflow, load_manifest
 from . import control
 from . import plotting
 
@@ -139,9 +141,14 @@ __all__ = [
     "recording",
     "RunRecorder",
     "RecordingSource",
+    "make_run_id",
     "safety",
     "SafetyEnvelope",
     "SafetyLimits",
+    "tracking",
+    "ExperimentIndex",
+    "log_run_to_mlflow",
+    "load_manifest",
     "control",
     "plotting",
     "synthetic_force_curve",

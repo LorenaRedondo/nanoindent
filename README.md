@@ -682,6 +682,37 @@ python -m nanoindent.control --source directory --dir scan_out --pattern "frame_
 `examples/deploy_control.py` runs the whole thing on a synthetic movie written to
 disk (the safety guards fire — ~44 rate-limited, ~37 bounds-clipped over 80 frames).
 
+#### Timestamps & experiment tracking (compare across runs)
+
+Runs are stamped with **real acquisition timestamps** (from file mtime, or the
+TIFF `DateTime` tag via `timestamp="metadata"`), a **run id**, and wall-clock
+**start/end** times. The recorder's `manifest.json` is **MLflow-shaped** (params /
+metrics / tags), so a folder of runs is directly comparable — no server required:
+
+```python
+from nanoindent import ExperimentIndex
+idx = ExperimentIndex("runs")            # scans every run's manifest.json
+idx.to_csv("runs/comparison.csv")        # one row per run, params+metrics flattened
+idx.best("diffusion_final_nm2_s")        # pick the winning run
+```
+
+```bash
+nanoindent-control --source directory --dir scan_out --outdir runs/r1 \
+    --tag sample=SLB --tag operator=afm     # records params/metrics/tags
+nanoindent-runs runs --csv runs/comparison.csv   # compare all runs
+```
+
+For teams already on **MLflow**, an optional export mirrors each run (params,
+metrics, tags, artifacts) into a tracking server — `pip install "nanoindent[tracking]"`:
+
+```python
+from nanoindent.tracking import log_run_to_mlflow
+log_run_to_mlflow("runs/r1", experiment="afm-control")   # or: nanoindent-runs runs --mlflow
+```
+
+`examples/experiment_tracking.py` sweeps a few settings and prints the comparison
+table (recovered diffusion, real-time factor, guard counts per run).
+
 ### Synthetic data & inverse analysis (end-to-end double-check)
 
 `nanoindent.dataset` closes the loop: it generates a **realistic AFM force
@@ -749,8 +780,9 @@ src/nanoindent/
 ├── adapters/       # vendor FrameSource adapters (Nanosurf / JPK / Asylum)
 ├── sources.py      # directory-watch source + reconnecting source (any instrument)
 ├── safety.py       # safety envelope: rate limit, scan bounds, setpoint, watchdog
-├── recording.py    # run recorder (frames / analysis / commands / events → disk)
-├── control.py      # config-driven control-loop CLI (nanoindent-control)
+├── recording.py    # run recorder (frames / analysis / commands / events, timestamps)
+├── tracking.py     # experiment index + comparison CSV + optional MLflow export
+├── control.py      # config-driven control-loop CLI (nanoindent-control / -runs)
 └── plotting.py     # publication-quality figures (vector output, CB-safe)
 examples/
 ├── paper_reproduction.py       ├── model_comparison.py
@@ -762,7 +794,8 @@ examples/
 ├── instrument_adapters.py      ├── jpk_live_session.py
 ├── jpk_versions.py             ├── nanosurf_live_session.py
 ├── asylum_live_session.py      ├── deploy_control.py
-├── model_slides.py             └── (msnl_bio_dc case study)
+├── experiment_tracking.py      ├── model_slides.py
+└── (msnl_bio_dc case study)
 tests/               # unit + physics-validation (slow) suites
 ```
 

@@ -83,15 +83,24 @@ def build_safety(cfg: dict) -> Optional[SafetyEnvelope]:
 
 
 def run_from_config(cfg: dict) -> dict:
-    """Run the loop described by ``cfg`` and return the recorder manifest."""
-    source = build_source(cfg.get("source", {}))
+    """Run the loop described by ``cfg`` and return the recorder manifest.
+
+    The manifest records **params** (the resolved config), **metrics** (run
+    outcomes), and **tags** (``cfg["tags"]``), so runs can be indexed/compared
+    (see :mod:`nanoindent.tracking`). If ``cfg["mlflow"]`` is set, the run is also
+    logged to MLflow.
+    """
+    source_cfg = cfg.get("source", {})
+    policy_names = cfg.get("policy", ["recenter_on_brightest"])
+    safety_cfg = cfg.get("safety", {})
+    source = build_source(source_cfg)
     analyzer = StreamingAnalyzer(
         getattr(source, "pixel_size_nm", 2.0),
         getattr(source, "frame_interval_s", 0.05),
         max_step_px=cfg.get("max_step_px", 6.0),
         event_k=cfg.get("event_k", 4.0))
-    policy = build_policy(cfg.get("policy", ["recenter_on_brightest"]))
-    envelope = build_safety(cfg.get("safety", {}))
+    policy = build_policy(policy_names)
+    envelope = build_safety(safety_cfg)
     if envelope is not None:
         policy = envelope.guard(policy)
 
@@ -101,11 +110,36 @@ def run_from_config(cfg: dict) -> dict:
     report = run_control_loop(src, analyzer, policy,
                               apply=cfg.get("apply", True),
                               on_state=recorder.on_state)
-    meta = {"source": cfg.get("source", {}).get("type", "simulated"),
-            "policy": cfg.get("policy", ["recenter_on_brightest"])}
+
+    # provenance: params (what was run) + tags (how to group) for comparison
+    params = {"source_type": source_cfg.get("type", "simulated"),
+              "policy": ",".join(policy_names),
+              "pixel_size_nm": getattr(source, "pixel_size_nm", None),
+              "frame_interval_s": getattr(source, "frame_interval_s", None),
+              "max_step_px": cfg.get("max_step_px", 6.0),
+              "event_k": cfg.get("event_k", 4.0)}
+    for k in ("scan_px", "n_particles", "D_nm2_per_s", "directory", "pattern"):
+        if k in source_cfg:
+            params[k] = source_cfg[k]
+    for k, v in safety_cfg.items():
+        if v is not None:
+            params[f"safety_{k}"] = v
+    metrics = {}
+    if envelope is not None:
+        metrics.update({f"guard_{k}": v for k, v in envelope.counts.items()})
+    tags = dict(cfg.get("tags", {}))
+    tags.setdefault("source", source_cfg.get("type", "simulated"))
+
+    meta = {"policy": policy_names}
     if envelope is not None:
         meta["safety_counts"] = envelope.counts
-    manifest = recorder.save(report, meta=meta)
+    manifest = recorder.save(report, params=params, metrics=metrics,
+                             tags=tags, meta=meta)
+
+    if cfg.get("mlflow"):
+        from .tracking import log_run_to_mlflow
+        log_run_to_mlflow(manifest, experiment=cfg.get("experiment", "nanoindent"),
+                          tracking_uri=cfg.get("tracking_uri"))
     return manifest
 
 
@@ -121,9 +155,12 @@ def _args_to_config(a) -> dict:
               "max_frame_gap_s": a.max_frame_gap_s}
     if a.setpoint_range:
         safety["setpoint_range"] = a.setpoint_range
+    tags = dict(t.split("=", 1) for t in a.tag) if a.tag else {}
     return {"source": source, "policy": a.policy.split(","), "outdir": a.outdir,
             "save_frames": a.save_frames, "safety": safety,
-            "max_step_px": a.max_step_px, "event_k": a.event_k}
+            "max_step_px": a.max_step_px, "event_k": a.event_k, "tags": tags,
+            "mlflow": a.mlflow, "experiment": a.experiment,
+            "tracking_uri": a.tracking_uri}
 
 
 def main(argv=None) -> int:
@@ -156,6 +193,13 @@ def main(argv=None) -> int:
                     dest="pause_after_lost")
     ap.add_argument("--max-frame-gap-s", type=float, default=None,
                     dest="max_frame_gap_s")
+    # experiment tracking
+    ap.add_argument("--tag", action="append", metavar="KEY=VALUE",
+                    help="run tag for grouping/comparison (repeatable)")
+    ap.add_argument("--mlflow", action="store_true",
+                    help="also log the run to MLflow (needs mlflow installed)")
+    ap.add_argument("--experiment", default="nanoindent")
+    ap.add_argument("--tracking-uri", default=None, dest="tracking_uri")
     a = ap.parse_args(argv)
 
     cfg = json.load(open(a.config)) if a.config else _args_to_config(a)
