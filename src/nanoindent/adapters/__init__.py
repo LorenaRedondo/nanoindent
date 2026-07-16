@@ -13,7 +13,8 @@ are **scaffolds** validated against in-process mock backends (shared physics via
 
 from .base import InstrumentAdapter
 from .emulation import BackendSimulator
-from .nanosurf import NanosurfAdapter, MockNanosurfSPM
+from .nanosurf import (NanosurfAdapter, MockNanosurfSPM, NanosurfCapabilities,
+                       NanosurfForceCurve)
 from .jpk import (
     JPKAdapter, MockJPKConnection, SocketJPKConnection, JPKInstrumentServer,
     JPKCapabilities, JPKForceRamp, JPKError, serve_backend, handle_one_client,
@@ -29,6 +30,8 @@ __all__ = [
     "BackendSimulator",
     "NanosurfAdapter",
     "MockNanosurfSPM",
+    "NanosurfCapabilities",
+    "NanosurfForceCurve",
     "JPKAdapter",
     "MockJPKConnection",
     "SocketJPKConnection",
