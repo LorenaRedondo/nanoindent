@@ -23,7 +23,8 @@ from .jpk_dialects import (
     JPKDialect, REFERENCE, JPK_SPM_LEGACY, JPK_SPM_4PLUS, BRUKER_BIOAFM,
     DIALECTS, select_dialect, get_dialect,
 )
-from .asylum import AsylumAdapter, MockIgorBridge
+from .asylum import (AsylumAdapter, MockIgorBridge, SocketIgorBridge,
+                     IgorListenerServer, AsylumCapabilities, AsylumForceCurve)
 
 __all__ = [
     "InstrumentAdapter",
@@ -51,4 +52,8 @@ __all__ = [
     "handle_one_client",
     "AsylumAdapter",
     "MockIgorBridge",
+    "SocketIgorBridge",
+    "IgorListenerServer",
+    "AsylumCapabilities",
+    "AsylumForceCurve",
 ]
