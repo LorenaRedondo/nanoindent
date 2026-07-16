@@ -60,6 +60,33 @@ def read_frame_file(path: str) -> Optional[np.ndarray]:
     return arr if arr.ndim == 2 else None
 
 
+def read_frame_timestamp(path: str, mode: str = "mtime") -> Optional[float]:
+    """Acquisition time of a frame file, as a Unix timestamp.
+
+    ``mode="mtime"`` uses the file's modification time (what the instrument
+    stamps when it writes the frame). ``mode="metadata"`` reads an embedded
+    timestamp — the TIFF ``DateTime`` tag — falling back to mtime. ``"none"``
+    returns ``None``.
+    """
+    if mode == "none":
+        return None
+    if mode == "metadata" and path.lower().endswith((".tif", ".tiff")):
+        try:
+            from PIL import Image
+            from datetime import datetime
+            with Image.open(path) as im:
+                dt = (im.tag_v2.get(306) if hasattr(im, "tag_v2") else None) \
+                    or (im.info.get("DateTime") if hasattr(im, "info") else None)
+            if dt:
+                return datetime.strptime(dt, "%Y:%m:%d %H:%M:%S").timestamp()
+        except Exception:                  # noqa: BLE001 — fall back to mtime
+            pass
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return None
+
+
 # ==========================================================================
 # directory watch source
 # ==========================================================================
@@ -91,7 +118,7 @@ class DirectoryWatchSource:
                  max_frames: Optional[int] = None,
                  idle_timeout_s: Optional[float] = None,
                  stop_file: Optional[str] = None, sort_by: str = "name",
-                 command_dir: Optional[str] = None):
+                 command_dir: Optional[str] = None, timestamp: str = "mtime"):
         self.directory = directory
         self.pattern = pattern
         self.pixel_size_nm = float(pixel_size_nm)
@@ -103,7 +130,11 @@ class DirectoryWatchSource:
         self.stop_file = stop_file
         self.sort_by = sort_by
         self.command_dir = command_dir
+        self.timestamp = timestamp
         self.command_log: List[Command] = []
+        # acquisition timestamps / paths, populated as frames are yielded
+        self.frame_times: List[Optional[float]] = []
+        self.frame_paths: List[str] = []
         if watch and max_frames is None and idle_timeout_s is None and stop_file is None:
             raise ValueError("watch=True needs a termination condition: set "
                              "max_frames, idle_timeout_s, or stop_file")
@@ -127,6 +158,8 @@ class DirectoryWatchSource:
                     seen.discard(f)               # retry a mid-write file later
                     continue
                 last_new = time.perf_counter()
+                self.frame_paths.append(f)
+                self.frame_times.append(read_frame_timestamp(f, self.timestamp))
                 yield frame
                 i += 1
                 if self.max_frames is not None and i >= self.max_frames:
