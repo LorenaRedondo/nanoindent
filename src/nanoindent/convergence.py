@@ -1,4 +1,4 @@
-"""Convergence and verification utilities (mirrors the paper's procedure).
+"""Convergence and verification utilities (docs/design.md section 6.1).
 
 Three studies, each returning a list of records that can be inspected or
 plotted:

@@ -65,7 +65,7 @@ class SimulationConfig:
 
     L: float = 100.0
     """Lateral size (nm).  Interpreted as the domain *radius* by default
-    (see the design doc, section 10)."""
+    (docs/design.md section 4.2)."""
 
     substrate: str = "bonded"
     """Bottom boundary condition. ``"bonded"`` fixes the film to the rigid
@@ -79,10 +79,11 @@ class SimulationConfig:
     """Young's modulus of the film (MPa)."""
 
     nu: float = 0.3
-    """Poisson's ratio.  The reference paper does not specify a value; 0.3 is
-    a documented default.  Values >= 0.45 trigger a locking warning because
-    the P2 displacement formulation is not designed for near-incompressible
-    behaviour (see design doc section 5.3)."""
+    """Poisson's ratio.  Not determined by the problem; 0.3 is a documented
+    default and is consequential (E* = E/(1-nu^2)), so sweep it rather than
+    trust it.  Values >= 0.45 trigger a locking warning because the P2
+    displacement formulation is not designed for near-incompressible
+    behaviour (docs/design.md section 5)."""
 
     # -- loading -----------------------------------------------------------
     delta_max: float = 1.0
@@ -96,9 +97,10 @@ class SimulationConfig:
     """Target element size near the contact point (r=0, z=h)."""
 
     mesh_size_edge: float = 5.0
-    """Target element size at the far lateral edge.  The paper quotes 0.1 nm
-    which is unreasonably fine for a 100 nm domain; a saner default is used
-    and the convergence study is the arbiter (design doc section 5.1)."""
+    """Target element size at the far lateral edge.  A 0.1 nm edge size on a
+    100 nm domain is unreasonably fine (huge element count for negligible
+    benefit far from contact); a saner default is used and the convergence
+    study is the arbiter (docs/design.md section 4.1)."""
 
     element_order: int = 2
     """Displacement element order.  2 (P2) is strongly recommended for
@@ -169,7 +171,7 @@ class SimulationConfig:
                 warnings.warn(
                     f"nu = {self.nu} is near-incompressible; the primal P2 "
                     "formulation may lock and over-stiffen. Use "
-                    "formulation='mixed' (design doc section 5.3).",
+                    "formulation='mixed' (docs/design.md section 5).",
                     stacklevel=2,
                 )
         if self.formulation not in ("primal", "mixed"):

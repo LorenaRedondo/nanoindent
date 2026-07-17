@@ -1,8 +1,16 @@
-"""Reproduce the reference paper's setup: F(delta) for h = 7 and 14 nm.
+"""The reference setup: F(delta) for h = 7 and 14 nm.
 
-Runs the FEM indentation for both film thicknesses, overlays the analytic
-Hertz and bottom-effect-correction (BEC) models, and saves a CSV + PNG for
-each thickness plus a combined comparison figure.
+Runs the representative bottom-effect study this library was built around --
+a rigid sphere (R = 17 nm) indenting a linear-elastic film (E = 130 MPa,
+h = 7 / 14 nm, lateral 100 nm) bonded to a rigid substrate, up to 1 nm.
+
+Runs the FEM for both film thicknesses, overlays the analytic Hertz and
+bottom-effect-correction (BEC) models, and saves a CSV + PNG for each
+thickness plus a combined comparison figure.
+
+Note nu = 0.3 is a documented default, not a determined value: E* = E/(1-nu^2),
+so nu = 0.5 would raise E* by ~21% at the same E. Sweep it (docs/design.md
+section 7).
 
 Usage
 -----

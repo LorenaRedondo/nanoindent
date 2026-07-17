@@ -1,7 +1,9 @@
 """nanoindent — FEM simulation of AFM nanoindentation of thin elastic films.
 
-Open-source (scikit-fem / dolfinx) replacement for the COMSOL setup of a rigid
-spherical tip indenting a linear-elastic film bonded to a rigid substrate.
+An open-source (scikit-fem / dolfinx) alternative to the commercial-FEM
+workflow for a rigid spherical tip indenting a linear-elastic film bonded to a
+rigid substrate, validated against analytic contact models rather than against
+another solver (docs/design.md section 6.2).
 
 Quick start
 -----------
