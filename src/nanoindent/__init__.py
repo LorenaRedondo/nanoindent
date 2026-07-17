@@ -31,6 +31,11 @@ from .experiment import (
     read_bruker, analyze_experiment, synthetic_raw_curve, JPKForceMap,
 )
 from . import slb
+from . import lipids
+from .lipids import (
+    LipiverseClient, MembranePrediction, MockLipiverseTransport, fetch_membrane,
+    LipiverseError, LipiverseUnavailable, UnknownSpecies, NotAMembraneLipid,
+)
 from . import video
 from .video import (
     AFMVideo, synthetic_video, load_video, read_asd, read_tiff, read_numpy,
@@ -95,6 +100,15 @@ __all__ = [
     "synthetic_raw_curve",
     "JPKForceMap",
     "slb",
+    "lipids",
+    "LipiverseClient",
+    "MembranePrediction",
+    "MockLipiverseTransport",
+    "fetch_membrane",
+    "LipiverseError",
+    "LipiverseUnavailable",
+    "UnknownSpecies",
+    "NotAMembraneLipid",
     "video",
     "AFMVideo",
     "synthetic_video",
