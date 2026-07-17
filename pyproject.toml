@@ -50,4 +50,5 @@ where = ["src"]
 testpaths = ["tests"]
 markers = [
     "slow: physics-validation tests that run full simulations",
+    "contract: cross-repo contract tests for the LIPIVERSE bridge; the live tier needs LIPIVERSE_URL",
 ]

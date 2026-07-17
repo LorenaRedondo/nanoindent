@@ -406,6 +406,71 @@ reads ~250 MPa). Instrument readers target the documented layouts; the CSV path
 and calibration pipeline are backend-free and fully tested — verify the binary
 readers against your own exports.
 
+### Lipid-informed SLB runs (LIPIVERSE bridge)
+
+`nanoindent.lipids` connects the [LIPIVERSE](../lipids) lipid atlas to this
+library, so an SLB analysis can be configured from a **species name** instead of
+a hand-set thickness — and, more usefully, so the atlas's composition-derived
+predictions can be **scored against what the AFM actually measured**. The two
+projects describe the same observables in the same units:
+
+| LIPIVERSE predicts (from composition) | `nanoindent.slb` measures (from AFM) |
+|---|---|
+| `thicknessNm` (nm) | contact→substrate height (A) / breakthrough step (B) |
+| `breakthroughNn` (nN) | `breakthrough_force` (nN) |
+| `compressibilityKa` (mN/m) | `kappa_A` (mN/m) |
+| `tmC` → phase at your temperature | — (informs expected stiffness) |
+| `packing` / `bilayer` | — (is the species even lamellar?) |
+
+```python
+from nanoindent import fetch_membrane, slb
+
+pred = fetch_membrane("PC 34:1")               # GET localhost:8787/species/PC-34-1
+an   = slb.analyze_map(fmap, R=20.0, film_thickness=pred.thickness_nm)
+cfg  = pred.to_simulation_config(E=15.0)       # h = predicted thickness
+print(pred.compare_to_slb(an))                 # predicted vs measured, per observable
+```
+
+Transport is stdlib `urllib` — **no new dependencies**, and the network is never
+required: pass `MockLipiverseTransport()` (a built-in library of common species,
+captured verbatim from LIPIVERSE's service layer) to work offline, which is also
+how the tests stay hermetic. Start the service with `npm run api` in the lipids
+repo, or point `$LIPIVERSE_URL` elsewhere.
+
+```bash
+python examples/lipid_informed_slb.py --species "PC 34:1" --offline
+python examples/lipid_informed_slb.py --species "PC 34:1" --map MAP.jpk-force-map
+```
+
+Because LIPIVERSE ships from a separate repo, nothing here sees it change its JSON.
+`tests/test_lipiverse_contract.py` pins that contract against a frozen golden
+record: the hermetic tier runs in normal CI (the parser must require every field
+in `REQUIRED_MEMBRANE_FIELDS`, and the offline library must match the golden), and
+an opt-in live tier checks the running service against it:
+
+```bash
+cd ../lipids && npm run api
+LIPIVERSE_URL=http://localhost:8787 pytest -m contract -q      # 44 passed
+```
+
+Run it when you touch either side. A live failure isn't automatically a bug —
+LIPIVERSE may have improved a heuristic — it means update the golden and the mock
+in one commit, and say why.
+
+**A predicted thickness is a prior to test, not geometry to trust.** LIPIVERSE's
+membrane numbers are heuristic composition formulas that it tags `predicted`,
+and this library is otherwise built on validated physics — so the tag is carried
+across the boundary rather than dropped: every `MembranePrediction` keeps its
+`provenance`, `to_simulation_config` stamps the predicted-`h` origin into the
+config `label` (and thus into results and figures), and `E` is **never** inferred,
+because LIPIVERSE predicts no modulus and that is the input the FEM most needs.
+Two documented limits of the prior (see the module docstring): the predicted
+nanomechanics are **headgroup-blind** (PC/SM/PE 34:1 return identical `F_break`
+and `κ_A`), and predicted thickness is **nearly flat** across chain length
+(3.71/3.72/3.73 nm for PC 36:2/34:1/32:0) where real gel and fluid bilayers
+differ markedly. Both are arguments for running `compare_to_slb` and calibrating,
+rather than consuming the prediction as an input.
+
 ### High-speed AFM movies (imaging dynamics)
 
 `nanoindent.video` adds a **time-resolved imaging** track alongside the
@@ -793,6 +858,7 @@ src/nanoindent/
 ├── dataset.py      # synthetic AFM data + modulus-recovery inverse analysis
 ├── experiment.py   # raw AFM ingestion (JPK/Bruker/Asylum/CSV) + calibration
 ├── slb.py          # supported-lipid-bilayer force-map analysis (breakthrough, κ_A, E)
+├── lipids.py       # LIPIVERSE bridge: species -> predicted h/Tm/F_break; predicted-vs-measured
 ├── video.py        # HS-AFM movies: readers, drift, tracking, diffusion, events
 ├── streaming.py    # online analyzer + simulated instrument + closed-loop control
 ├── adapters/       # vendor FrameSource adapters (Nanosurf / JPK / Asylum)
@@ -809,6 +875,7 @@ examples/
 ├── synthetic_analysis.py       ├── field_heatmap.py
 ├── analyze_afm_experiment.py   ├── publication_figure.py
 ├── msnl_bio_dc.py              ├── slb_force_map.py
+├── lipid_informed_slb.py       │
 ├── hsafm_video.py              ├── streaming_control.py
 ├── instrument_adapters.py      ├── jpk_live_session.py
 ├── jpk_versions.py             ├── nanosurf_live_session.py
