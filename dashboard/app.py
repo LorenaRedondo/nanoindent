@@ -31,6 +31,7 @@ import streamlit as st
 from nanoindent import (
     SimulationConfig, IndentationSolver, analytics, fit_modulus,
     read_jpk_map, slb, video as hsvideo, streaming, ExperimentIndex, load_run,
+    forcemap, viscoelastic as ve,
 )
 from nanoindent.contact import make_tip
 
@@ -524,15 +525,175 @@ def run_browser_page():
 
 
 # ==========================================================================
+# Viscoelastic fit page
+# ==========================================================================
+@st.cache_data(show_spinner=False)
+def geometric_kernel(R: float, nu: float, h: float, delta_max: float):
+    """Geometric kernel phi(delta)=F/E from one FEM solve (cached)."""
+    cfg = SimulationConfig(R=R, nu=nu, h=h, L=max(100.0, 8 * h),
+                           delta_max=delta_max, formulation="mixed",
+                           mesh_size_contact=0.35, mesh_size_edge=12.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return forcemap.geometric_kernel(cfg)
+
+
+def _parse_csv(raw: bytes, n_cols: int):
+    import io
+    txt = raw.decode("utf-8", "replace")
+    rows = []
+    for line in txt.splitlines():
+        line = line.strip()
+        if not line or line[0] in "#":
+            continue
+        parts = [p for p in line.replace(",", " ").split() if p]
+        try:
+            vals = [float(p) for p in parts[:n_cols]]
+        except ValueError:
+            continue          # header row
+        if len(vals) == n_cols:
+            rows.append(vals)
+    return np.array(rows, dtype=float)
+
+
+def viscoelastic_fit_page():
+    st.title("🧪 Viscoelastic fit")
+    st.caption("Recover a sample's Standard-Linear-Solid parameters — glassy E0, "
+               "equilibrium E∞, relaxation time τ — from a stress-relaxation "
+               "(ramp-and-hold) curve or a frequency sweep. The FEM geometric "
+               "kernel separates tip/geometry from material response.")
+
+    protocol = st.sidebar.radio("Protocol", ["Stress relaxation", "Frequency sweep"])
+    source = st.sidebar.radio("Data", ["Synthetic demo", "Upload CSV"])
+
+    st.sidebar.header("Tip & geometry")
+    R = st.sidebar.slider("Tip radius R (nm)", 1.0, 100.0, 20.0, 0.5)
+    nu = st.sidebar.slider("Poisson's ratio ν", 0.0, 0.5, 0.5, 0.01)
+    h = st.sidebar.slider("Film thickness h (nm)", 1.0, 40.0, 6.0, 0.5)
+    delta_hold = st.sidebar.slider("Hold / operating indentation δ (nm)",
+                                   0.2, 2.5, 1.2, 0.1)
+    kern = geometric_kernel(R, nu, h, max(delta_hold, 1.5))
+    phi = float(kern.phi_of(np.array([delta_hold]))[0])
+    st.sidebar.caption(f"geometric kernel φ(δ) = {phi:.2f} pN/MPa")
+
+    truth = None
+    if source == "Synthetic demo":
+        st.sidebar.header("True material (hidden from the fit)")
+        E0 = st.sidebar.slider("E0 glassy (MPa)", 2.0, 200.0, 45.0, 1.0)
+        Einf = st.sidebar.slider("E∞ equilibrium (MPa)", 1.0, float(E0) - 1.0,
+                                 min(12.0, float(E0) - 1.0), 1.0)
+        tau = st.sidebar.select_slider(
+            "τ relaxation (s)",
+            options=[0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0], value=0.03)
+        truth = (E0, Einf, tau)
+        sls = ve.standard_linear_solid(E0=E0, E_inf=Einf, tau=tau)
+
+    if protocol == "Stress relaxation":
+        noise = st.sidebar.slider("Force noise (pN)", 0.0, 60.0, 15.0, 1.0)
+        if source == "Synthetic demo":
+            rng = np.random.default_rng(0)
+            t, d, F = ve.ramp_hold_curve(sls, kern.phi_of, delta_max=delta_hold,
+                                         approach_velocity_nm_s=2e4,
+                                         hold_s=8 * tau, n_ramp=60, n_hold=300)
+            hold = t >= t[d.argmax()]
+            th, Fh = t[hold] - t[hold][0], F[hold] + rng.normal(0, noise, hold.sum())
+        else:
+            up = st.file_uploader("CSV: two columns — time (s), force (pN)",
+                                  type=["csv", "txt", "dat"])
+            if up is None:
+                st.info("Upload a hold curve, or switch to Synthetic demo.")
+                return
+            data = _parse_csv(up.getvalue(), 2)
+            if data.size == 0:
+                st.error("No numeric (time, force) rows found."); return
+            th, Fh = data[:, 0], data[:, 1]
+
+        try:
+            fit = ve.fit_relaxation(th, Fh, phi)
+        except Exception as exc:
+            st.error(f"Fit failed: {exc}"); return
+
+        c = st.columns(4)
+        c[0].metric("E0 glassy", f"{fit.E0:.1f} MPa", f"± {fit.E0_std:.2g}")
+        c[1].metric("E∞ equilibrium", f"{fit.E_inf:.1f} MPa", f"± {fit.E_inf_std:.2g}")
+        c[2].metric("τ relaxation", f"{fit.tau*1e3:.0f} ms", f"± {fit.tau_std*1e3:.2g}")
+        c[3].metric("β = 1−E∞/E0", f"{fit.beta:.2f}")
+
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.plot(th * 1e3, Fh, "o", ms=3, color="0.6", label="measured")
+        tg = np.linspace(th.min(), th.max(), 300)
+        ax.plot(tg * 1e3, phi * fit.model.E_relax(tg - tg.min()), "-",
+                color="#D55E00", lw=2.2, label="SLS fit")
+        ax.set_xlabel("time in hold (ms)"); ax.set_ylabel("force (pN)")
+        ax.legend(frameon=False); st.pyplot(fig)
+
+    else:  # Frequency sweep
+        noise = st.sidebar.slider("E′/E″ noise (MPa)", 0.0, 3.0, 0.6, 0.1)
+        if source == "Synthetic demo":
+            rng = np.random.default_rng(0)
+            freqs = np.logspace(-0.5, 3.0, 18)
+            om = 2 * np.pi * freqs
+            spec = ve.frequency_sweep(
+                sls, kern.phi_of, lambda d0: ve.kernel_slope(kern.phi_of, d0),
+                om, delta0=delta_hold, delta_amp=0.05)
+            Ep = spec.storage + rng.normal(0, noise, spec.storage.size)
+            Epp = spec.loss + rng.normal(0, noise, spec.loss.size)
+        else:
+            up = st.file_uploader("CSV: three columns — freq (Hz), E′ (MPa), E″ (MPa)",
+                                  type=["csv", "txt", "dat"])
+            if up is None:
+                st.info("Upload a spectrum, or switch to Synthetic demo.")
+                return
+            data = _parse_csv(up.getvalue(), 3)
+            if data.size == 0:
+                st.error("No numeric (freq, E', E'') rows found."); return
+            freqs, Ep, Epp = data[:, 0], data[:, 1], data[:, 2]
+            om = 2 * np.pi * freqs
+
+        try:
+            fit = ve.fit_dynamic_spectrum(om, Ep, Epp)
+        except Exception as exc:
+            st.error(f"Fit failed: {exc}"); return
+
+        c = st.columns(4)
+        c[0].metric("E0 glassy", f"{fit.E0:.1f} MPa", f"± {fit.E0_std:.2g}")
+        c[1].metric("E∞ equilibrium", f"{fit.E_inf:.1f} MPa", f"± {fit.E_inf_std:.2g}")
+        c[2].metric("τ relaxation", f"{fit.tau*1e3:.0f} ms", f"± {fit.tau_std*1e3:.2g}")
+        c[3].metric("f corner", f"{1/(2*np.pi*fit.tau):.1f} Hz")
+
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.loglog(freqs, Ep, "o", ms=5, mfc="none", color="#0072B2", label="E′")
+        ax.loglog(freqs, Epp, "s", ms=5, mfc="none", color="#D55E00", label="E″")
+        fg = np.logspace(np.log10(freqs.min()), np.log10(freqs.max()), 200)
+        wg = 2 * np.pi * fg
+        ax.loglog(fg, fit.model.storage(wg), "-", color="#0072B2", lw=2)
+        ax.loglog(fg, fit.model.loss(wg), "-", color="#D55E00", lw=2)
+        ax.set_xlabel("frequency (Hz)"); ax.set_ylabel("modulus (MPa)")
+        ax.legend(frameon=False); st.pyplot(fig)
+
+    if truth is not None:
+        st.caption(f"ground truth (synthetic): E0 = {truth[0]:g} MPa, "
+                   f"E∞ = {truth[1]:g} MPa, τ = {truth[2]*1e3:g} ms — "
+                   "the fit above never sees these.")
+    st.markdown(
+        "**Requirements on real data:** a good tip/geometry calibration (the "
+        "kernel φ), a detected contact point, and an experiment whose timescale "
+        "brackets τ. Relaxation and frequency protocols live on the loading/hold "
+        "branch where the theory is exact; hysteresis-loop fitting does not.")
+
+
+# ==========================================================================
 PAGE = st.sidebar.radio(
     "Page",
-    ["FEM simulation", "SLB force-map analysis", "HS-AFM movie analysis",
-     "Live control (simulated)", "Run browser"])
+    ["FEM simulation", "SLB force-map analysis", "Viscoelastic fit",
+     "HS-AFM movie analysis", "Live control (simulated)", "Run browser"])
 st.sidebar.markdown("---")
 if PAGE == "FEM simulation":
     fem_page()
 elif PAGE == "SLB force-map analysis":
     slb_page()
+elif PAGE == "Viscoelastic fit":
+    viscoelastic_fit_page()
 elif PAGE == "HS-AFM movie analysis":
     hsafm_page()
 elif PAGE == "Live control (simulated)":

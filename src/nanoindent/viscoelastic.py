@@ -306,3 +306,142 @@ def kernel_slope(phi: Callable[[np.ndarray], np.ndarray], delta0: float,
     d = np.array([delta0 - eps, delta0 + eps])
     p = np.asarray(phi(d), dtype=float)
     return float((p[1] - p[0]) / (2.0 * eps))
+
+
+# --------------------------------------------------------------------------
+# inverse problem: recover viscoelastic parameters from measured curves
+# --------------------------------------------------------------------------
+@dataclass
+class ViscoelasticFit:
+    """Standard-Linear-Solid parameters recovered from a measurement.
+
+    ``E0`` glassy (instantaneous), ``E_inf`` equilibrium (MPa); ``tau`` relaxation
+    time (s); ``beta = 1 − E_inf/E0`` the relaxation strength. ``*_std`` are 1σ
+    uncertainties from the fit covariance; ``rmse`` is the residual in the fitted
+    quantity's units; ``model`` is the SLS the fit corresponds to.
+    """
+
+    E0: float
+    E_inf: float
+    tau: float
+    beta: float
+    E0_std: float
+    E_inf_std: float
+    tau_std: float
+    rmse: float
+
+    @property
+    def model(self) -> "RelaxationModel":
+        return standard_linear_solid(E0=self.E0, E_inf=self.E_inf, tau=self.tau)
+
+    def summary(self) -> str:
+        return (f"E0 = {self.E0:.3g} ± {self.E0_std:.2g} MPa, "
+                f"E_inf = {self.E_inf:.3g} ± {self.E_inf_std:.2g} MPa, "
+                f"tau = {self.tau*1e3:.3g} ± {self.tau_std*1e3:.2g} ms "
+                f"(beta = {self.beta:.2f})")
+
+
+def _curve_fit(f, x, y, p0, bounds):
+    from scipy.optimize import curve_fit
+    popt, pcov = curve_fit(f, x, y, p0=p0, bounds=bounds, maxfev=20000)
+    perr = np.sqrt(np.abs(np.diag(pcov)))
+    resid = np.asarray(y) - f(x, *popt)
+    rmse = float(np.sqrt(np.mean(resid ** 2)))
+    return popt, perr, rmse
+
+
+def fit_relaxation(t, force, phi: float) -> ViscoelasticFit:
+    """Recover SLS parameters from a stress-relaxation (ramp-and-hold) curve.
+
+    During the hold the indentation is fixed, so the force is the relaxation
+    modulus scaled by the geometric kernel at the hold depth,
+    ``F(t) = phi · E(t) = phi·(E_inf + (E0−E_inf) e^{−t/tau})``. This fits the
+    three-parameter exponential and converts to moduli.
+
+    Parameters
+    ----------
+    t:
+        Time since the start of the hold (s), increasing from ~0.
+    force:
+        Measured force over the hold (pN).
+    phi:
+        Geometric kernel at the hold indentation, ``F/E`` (pN/MPa) -- e.g.
+        ``GeometricKernel.phi_of(delta_hold)``. This is the geometry/tip
+        calibration that separates material response from contact shape.
+
+    Returns
+    -------
+    ViscoelasticFit
+    """
+    t = np.asarray(t, dtype=float)
+    force = np.asarray(force, dtype=float)
+    t = t - t.min()
+    if phi <= 0:
+        raise ValueError("phi (geometric kernel at hold depth) must be > 0")
+
+    F_inf0 = float(force[-max(len(force) // 10, 1):].mean())
+    F0_0 = float(force[:max(len(force) // 20, 1)].mean())
+    b0 = max(F0_0 - F_inf0, 1e-6)
+    # tau guess: time to fall to 1/e of the initial drop
+    target = F_inf0 + b0 / np.e
+    below = np.where(force <= target)[0]
+    tau0 = float(t[below[0]]) if below.size else max(t[-1] / 3.0, 1e-3)
+    tau0 = max(tau0, 1e-6)
+
+    def model(tt, a, b, tau):
+        return a + b * np.exp(-tt / tau)
+
+    (a, b, tau), (a_s, b_s, tau_s), rmse = _curve_fit(
+        model, t, force, p0=[F_inf0, b0, tau0],
+        bounds=([0, 0, 1e-9], [np.inf, np.inf, np.inf]))
+
+    E_inf = a / phi
+    E0 = (a + b) / phi
+    E_inf_std = a_s / phi
+    E0_std = np.sqrt(a_s ** 2 + b_s ** 2) / phi
+    beta = 1.0 - E_inf / E0 if E0 > 0 else 0.0
+    return ViscoelasticFit(E0=E0, E_inf=E_inf, tau=tau, beta=beta,
+                           E0_std=E0_std, E_inf_std=E_inf_std, tau_std=tau_s,
+                           rmse=rmse / phi)
+
+
+def fit_dynamic_spectrum(omega, storage, loss) -> ViscoelasticFit:
+    """Recover SLS parameters from a measured complex modulus spectrum.
+
+    Fits both branches jointly to the single-relaxation forms
+    ``E'(w) = E_inf + (E0−E_inf) w²τ²/(1+w²τ²)`` and
+    ``E''(w) = (E0−E_inf) wτ/(1+w²τ²)``. The loss peak locates ``tau`` (wτ = 1);
+    the low/high-frequency plateaus of the storage give ``E_inf`` and ``E0``.
+
+    Parameters
+    ----------
+    omega:
+        Angular frequencies (rad/s).
+    storage, loss:
+        Measured ``E'(w)`` and ``E''(w)`` (MPa), e.g. from :func:`frequency_sweep`
+        on real oscillatory data.
+    """
+    omega = np.asarray(omega, dtype=float)
+    storage = np.asarray(storage, dtype=float)
+    loss = np.asarray(loss, dtype=float)
+
+    E_inf0 = float(np.min(storage))
+    E0_0 = float(np.max(storage))
+    tau0 = 1.0 / omega[int(np.argmax(loss))] if np.any(loss > 0) else 1.0 / np.median(omega)
+
+    def both(w, E0, E_inf, tau):
+        n = w.size // 2
+        ws, wl = w[:n], w[n:]
+        xs, xl = ws * tau, wl * tau
+        sp = E_inf + (E0 - E_inf) * xs ** 2 / (1.0 + xs ** 2)
+        ls = (E0 - E_inf) * xl / (1.0 + xl ** 2)
+        return np.concatenate([sp, ls])
+
+    wcat = np.concatenate([omega, omega])
+    ycat = np.concatenate([storage, loss])
+    (E0, E_inf, tau), (E0_s, Ei_s, tau_s), rmse = _curve_fit(
+        both, wcat, ycat, p0=[E0_0, E_inf0, tau0],
+        bounds=([0, 0, 1e-9], [np.inf, np.inf, np.inf]))
+    beta = 1.0 - E_inf / E0 if E0 > 0 else 0.0
+    return ViscoelasticFit(E0=E0, E_inf=E_inf, tau=tau, beta=beta,
+                           E0_std=E0_s, E_inf_std=Ei_s, tau_std=tau_s, rmse=rmse)

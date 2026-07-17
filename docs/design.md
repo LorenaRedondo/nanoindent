@@ -387,7 +387,22 @@ sweeps pitch × frequency to draw the boundary. The upshot is a two-limit rule:
 a poke sees fresh material if the step exceeds ~1.5 a **or** the interval exceeds a
 few `τ`; it does not if both are small.
 
-### 8.4 What is *not* modelled
+### 8.4 The inverse problem — reading parameters off a measurement
+
+The forward model runs backwards to interpret real data. Because a force curve
+factorises as `F(t) = ∫ E(t−t′) d/dt′[φ(δ(t′))] dt′` — geometry `φ` times material
+`E(t)` — calibrating `φ` (one FEM solve, the tip/contact) turns the curve into a
+pure convolution of the relaxation function, and the SLS parameters fall out by
+least squares. `fit_relaxation` fits a ramp-and-hold decay (`F = φ·(E_inf +
+(E0−E_inf)e^{−t/τ})`); `fit_dynamic_spectrum` fits a measured `E′(ω)`, `E″(ω)`
+(loss peak locates `τ`, the storage plateaus give `E_inf`, `E0`). A synthetic
+round-trip recovers known parameters to a percent through realistic noise. Both
+protocols live on the loading/hold branch, where the theory is exact — preferred
+over hysteresis-loop fitting, which sits on the approximate retract (§8.5). The
+practical requirements are a good `φ` calibration, a detected contact point, and
+an experiment whose timescale brackets `τ`.
+
+### 8.5 What is *not* modelled
 
 The force-volume timing is kinematic, not a coupled cantilever dynamics model
 (no tip inertia or hydrodynamic drag — irrelevant at the elastic quasi-static

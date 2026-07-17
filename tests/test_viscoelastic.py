@@ -115,6 +115,46 @@ def test_kernel_slope_matches_analytic():
     assert ve.kernel_slope(phi, 1.0) == pytest.approx(1.5, rel=1e-3)
 
 
+def test_fit_relaxation_round_trip():
+    # Build a hold curve from known params, fit them back.
+    E0, E_inf, tau, phi = 45.0, 12.0, 0.03, 3.5
+    sls = ve.standard_linear_solid(E0=E0, E_inf=E_inf, tau=tau)
+    t = np.linspace(0.0, 8 * tau, 400)
+    force = phi * sls.E_relax(t)
+    fit = ve.fit_relaxation(t, force, phi)
+    assert fit.E0 == pytest.approx(E0, rel=0.02)
+    assert fit.E_inf == pytest.approx(E_inf, rel=0.02)
+    assert fit.tau == pytest.approx(tau, rel=0.05)
+    assert fit.beta == pytest.approx(1 - E_inf / E0, rel=0.02)
+
+
+def test_fit_relaxation_survives_noise():
+    E0, E_inf, tau, phi = 40.0, 10.0, 0.05, 4.0
+    sls = ve.standard_linear_solid(E0=E0, E_inf=E_inf, tau=tau)
+    t = np.linspace(0.0, 10 * tau, 500)
+    rng = np.random.default_rng(0)
+    force = phi * sls.E_relax(t) + rng.normal(0, 12.0, t.size)
+    fit = ve.fit_relaxation(t, force, phi)
+    assert fit.E0 == pytest.approx(E0, rel=0.08)
+    assert fit.E_inf == pytest.approx(E_inf, rel=0.08)
+    assert fit.tau == pytest.approx(tau, rel=0.15)
+
+
+def test_fit_dynamic_spectrum_round_trip():
+    E0, E_inf, tau = 30.0, 8.0, 0.01
+    sls = ve.standard_linear_solid(E0=E0, E_inf=E_inf, tau=tau)
+    omega = 2 * np.pi * np.logspace(-1, 3, 30)
+    fit = ve.fit_dynamic_spectrum(omega, sls.storage(omega), sls.loss(omega))
+    assert fit.E0 == pytest.approx(E0, rel=0.02)
+    assert fit.E_inf == pytest.approx(E_inf, rel=0.02)
+    assert fit.tau == pytest.approx(tau, rel=0.03)
+
+
+def test_fit_relaxation_rejects_bad_phi():
+    with pytest.raises(ValueError):
+        ve.fit_relaxation(np.linspace(0, 1, 10), np.ones(10), phi=0.0)
+
+
 def test_dynamic_spectrum_freq_hz():
     spec = ve.DynamicSpectrum(omega=np.array([2 * np.pi]),
                               storage=np.array([1.0]), loss=np.array([0.1]),

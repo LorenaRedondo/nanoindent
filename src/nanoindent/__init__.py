@@ -42,7 +42,7 @@ from . import viscoelastic
 from .viscoelastic import (
     RelaxationModel, standard_linear_solid, generalized_maxwell,
     hereditary_force, ramp_hold_curve, frequency_sweep, DynamicSpectrum,
-    kernel_slope,
+    kernel_slope, ViscoelasticFit, fit_relaxation, fit_dynamic_spectrum,
 )
 from . import recovery
 from .recovery import (
@@ -138,6 +138,9 @@ __all__ = [
     "frequency_sweep",
     "DynamicSpectrum",
     "kernel_slope",
+    "ViscoelasticFit",
+    "fit_relaxation",
+    "fit_dynamic_spectrum",
     # recovery between consecutive indentations
     "recovery",
     "SurfaceFootprint",
