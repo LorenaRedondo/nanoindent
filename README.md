@@ -119,6 +119,7 @@ python examples/chadwick_verification.py         # incompressible (nu=0.5) mixed
 python examples/field_heatmap.py                 # von Mises / displacement field heatmaps
 python examples/force_volume.py                  # synthetic force map over a two-phase sample; round-trip
 python examples/viscoelastic_sweep.py            # dynamic moduli E'(w)/E''(w) vs closed-form SLS
+python examples/afm_force_curves.py              # AFM view: rate-dependent apparent modulus + hysteresis
 python examples/force_volume_video.py            # video: tip inserting pixel-by-pixel, map filling in
 python examples/fem_insertions_video.py          # video: real FEM von Mises field, several insertions
 python examples/afm_recovery_video.py            # video: viscoelastic recovery limits between lateral pokes

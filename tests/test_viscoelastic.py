@@ -66,6 +66,27 @@ def test_stress_relaxation_decays_to_equilibrium():
     assert F[-1] == pytest.approx(10.0, rel=0.02)            # E_inf * phi(1)
 
 
+def test_apparent_modulus_rate_limits():
+    # The AFM view: a Hertz fit to the approach reads E_inf when pushed slowly
+    # (material relaxes) and E0 when pushed fast (glassy). Same material, two
+    # very different "measured" moduli -- the rate artifact.
+    sls = ve.standard_linear_solid(E0=40.0, E_inf=10.0, tau=1e-3)
+    phi = lambda d: np.asarray(d, float) ** 1.5
+
+    def fit_E(contact_time):
+        t = np.linspace(0.0, contact_time, 400)
+        d = 1.0 * (1.0 - np.abs(2.0 * t / contact_time - 1.0))
+        F = ve.hereditary_force(t, d, sls, phi)
+        up = t <= contact_time / 2.0
+        s = phi(d[up])
+        return float(np.dot(F[up], s) / np.dot(s, s))
+
+    slow = fit_E(contact_time=1.0)      # >> tau
+    fast = fit_E(contact_time=1e-6)     # << tau
+    assert slow == pytest.approx(10.0, rel=0.05)      # -> E_inf
+    assert fast == pytest.approx(40.0, rel=0.05)      # -> E0
+
+
 # -- frequency sweep: recovered E'(w), E''(w) match closed form ------------
 def test_frequency_sweep_matches_analytic_linear_kernel():
     sls = ve.standard_linear_solid(E0=30.0, E_inf=10.0, tau=1e-3)
