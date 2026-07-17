@@ -3,8 +3,9 @@
 [![CI](https://github.com/alpibrusl/afm-finite-elements/actions/workflows/ci.yml/badge.svg)](https://github.com/alpibrusl/afm-finite-elements/actions/workflows/ci.yml)
 
 FEM simulation of **AFM nanoindentation of thin elastic films** by a rigid
-spherical tip. An open-source Python replacement for a COMSOL setup: a rigid
-sphere (R = 17 nm) indenting a linear-elastic film (E = 130 MPa, thickness
+spherical tip — an open-source Python alternative to the commercial-FEM
+(COMSOL-style) workflow for this problem. The reference setup: a rigid sphere
+(R = 17 nm) indenting a linear-elastic film (E = 130 MPa, thickness
 h = 7 / 14 nm, lateral size 100 nm) bonded to a rigid substrate, frictionless
 contact, indentation up to 1 nm.
 
@@ -12,6 +13,13 @@ The library computes force–indentation curves **F(δ)**, quantifies the
 **bottom-effect stiffening** of a finite-thickness bonded film relative to the
 Hertz half-space, and ships analytic benchmarks (Hertz, Dimitriadis 2002,
 Garcia & Garcia 2018) for validation.
+
+Validation here is against **analytic closed forms**, not against another
+solver: a second FEM code carries its own discretisation error and its own
+unstated mesh choices, so agreeing with it would show that two codes made
+similar decisions — not that either is right. See
+[`docs/design.md`](docs/design.md) for the modelling and numerical rationale,
+and the judgement calls (ν, domain size, small strain) stated as such.
 
 ---
 
@@ -78,7 +86,7 @@ from nanoindent import SimulationConfig, IndentationSolver
 cfg = SimulationConfig(
     R=17.0,            # nm, tip radius
     E=130.0,           # MPa, sample Young's modulus
-    nu=0.3,            # Poisson's ratio (the paper does not specify one!)
+    nu=0.3,            # Poisson's ratio — a default, not a determined value; sweep it
     h=7.0,             # nm, film thickness
     L=100.0,           # nm, lateral size (radius)
     delta_max=1.0,     # nm
@@ -257,10 +265,10 @@ natural AFM scale (the Hertz estimate at δ = 1 nm is ≈ 786 pN).
 
 The mesh is a graded axisymmetric rectangle, clustered at the contact point
 `(r = 0, z = h)` (element size `mesh_size_contact`) and coarsening toward the
-lateral edge (`mesh_size_edge`). The paper's quoted **0.1 nm edge size** on a
-100 nm domain is unreasonably fine (a huge element count for negligible
-benefit far from contact); the default here is a saner few-nm edge size, with
-the convergence study as the arbiter. Vertical grading guarantees several
+lateral edge (`mesh_size_edge`). A **0.1 nm edge size** on a 100 nm domain is
+unreasonably fine (a huge element count for negligible benefit far from
+contact); the default here is a saner few-nm edge size, with the convergence
+study as the arbiter. Vertical grading guarantees several
 element layers across even a 7 nm film, and quadratic (P2) displacement
 elements resolve bending and contact accurately with few elements.
 
@@ -302,7 +310,7 @@ coefficient (`examples/chadwick_verification.py`):
 
 ## Convergence & validation
 
-`nanoindent.convergence` provides three studies mirroring the paper:
+`nanoindent.convergence` provides three studies ([`docs/design.md` §6.1](docs/design.md)):
 
 ```python
 from nanoindent import SimulationConfig, convergence
@@ -883,16 +891,24 @@ examples/
 ├── experiment_tracking.py      ├── replay_run.py
 ├── model_slides.py             └── (msnl_bio_dc case study)
 tests/               # unit + physics-validation (slow) suites
+docs/
+├── design.md       # modelling + numerical rationale; judgement calls stated
+└── methodology_msnl_bio_dc.md   # Methods text for the MSNL-Bio-DC case study
 ```
 
 ## Modelling choices (documented, parametrized)
 
-- **Poisson's ratio** is not given in the paper → default `ν = 0.3`, exposed
-  prominently; run a sensitivity sweep by varying `cfg.nu`.
-- **"Lateral size 100 nm"** is interpreted as the domain **radius** by default
-  (`L`), and is a parameter.
-- **Small strain** is assumed (as in the paper); a 1 nm indent on a 7 nm film
-  is near the edge of small-strain validity, so expect a few-percent
+Judgement calls the physics doesn't force — each a parameter, not a constant.
+Full rationale in [`docs/design.md` §7](docs/design.md).
+
+- **Poisson's ratio** is not determined by the problem → default `ν = 0.3`,
+  exposed prominently. It is consequential: `E* = E/(1−ν²)`, so ν = 0.3 gives
+  `E* ≈ 143 MPa` vs ν = 0.5 → `E* ≈ 173 MPa` at `E = 130 MPa` — about 21% on
+  force. Run a sensitivity sweep by varying `cfg.nu` rather than trusting it.
+- **"Lateral size 100 nm"** is ambiguous; interpreted as the domain **radius**
+  by default (`L`), and is a parameter. Compare against `√(Rδ)`.
+- **Small strain** is assumed; a 1 nm indent on a 7 nm film (`δ/h ≈ 14%`) is
+  near the edge of small-strain validity, so expect a few-percent
   finite-strain error — out of scope for v1.
 
 ## References

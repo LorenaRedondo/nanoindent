@@ -1,9 +1,9 @@
 """IndentationSolver: axisymmetric penalty-contact FEM driver.
 
-Backend: scikit-fem (pure-pip fallback sanctioned by the design doc when
-dolfinx is unavailable).  The weak-form assembly is the only backend-specific
-part of the library; everything else (config, contact geometry, analytics,
-post-processing) is backend-agnostic.
+Backend: scikit-fem (the pure-pip fallback used when dolfinx is unavailable;
+rationale in docs/design.md section 8).  The weak-form assembly is the only
+backend-specific part of the library; everything else (config, contact
+geometry, analytics, post-processing) is backend-agnostic.
 
 Formulation
 -----------

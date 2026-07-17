@@ -1,10 +1,10 @@
 """Axisymmetric mesh generation for the film-on-substrate problem.
 
-The design doc targets gmsh + dolfinx.  In environments where dolfinx cannot
-be installed we fall back to scikit-fem (pure pip), and gmsh is not required
-either: the domain here is a simple graded rectangle in (r, z), which is built
-directly as a tensor-product triangle mesh with a size field clustered at the
-contact point ``(r=0, z=h)``.
+The design target is gmsh + dolfinx (docs/design.md section 8).  In
+environments where dolfinx cannot be installed we fall back to scikit-fem
+(pure pip), and gmsh is not required either: the domain here is a simple
+graded rectangle in (r, z), which is built directly as a tensor-product
+triangle mesh with a size field clustered at the contact point ``(r=0, z=h)``.
 
 Boundaries are tagged consistently with the physics spec:
 
