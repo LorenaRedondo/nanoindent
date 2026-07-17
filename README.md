@@ -166,6 +166,12 @@ Two videos animate this (click to view):
   a viscoelastic material (persistent trough) and a more elastic one (recovers
   cleanly, fresh material at every poke), set by the viscous fraction β = 1 −
   E_inf/E0.
+- **Intermediate materials** — the same scan swept across the elastic↔viscoelastic
+  axis (regenerate any point with `--viscous-fraction` / `--tau`):
+  [mostly elastic](docs/recovery_mid1_mostly_elastic.mp4) (β=0.35, τ=25 ms, ~5%
+  residual), [balanced](docs/recovery_mid2_balanced.mp4) (β=0.55, τ=80 ms, ~16%),
+  [mostly viscoelastic](docs/recovery_mid3_mostly_viscoelastic.mp4) (β=0.70,
+  τ=200 ms, ~22%).
 
 ### Publication-quality figures
 
