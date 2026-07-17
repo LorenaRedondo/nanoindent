@@ -17,7 +17,10 @@ Garcia & Garcia 2018) for validation.
 Validation here is against **analytic closed forms**, not against another
 solver: a second FEM code carries its own discretisation error and its own
 unstated mesh choices, so agreeing with it would show that two codes made
-similar decisions — not that either is right. See
+similar decisions — not that either is right. That claim has been tested once,
+against MoFEM's axisymmetric Hertz benchmark, and it held: MoFEM's result lands
+inside this solver's own mesh scatter, separating nothing that Hertz had not
+already settled (`examples/mofem_cross_check.py`, `docs/design.md` §6.3). See
 [`docs/design.md`](docs/design.md) for the modelling and numerical rationale,
 and the judgement calls (ν, domain size, small strain) stated as such.
 
@@ -33,6 +36,9 @@ and the judgement calls (ν, domain size, small strain) stated as such.
   bonded-bottom σ_zz integral) cross-checked for equilibrium.
 - **Analytic benchmarks** and built-in **convergence studies** (mesh, penalty,
   load step).
+- **Force-volume maps** over heterogeneous samples and **viscoelastic** dynamic
+  moduli `E'(ω)`, `E''(ω)` — both from a *single* FEM solve, since force is
+  exactly proportional to modulus (`docs/design.md` §8).
 - Clean, parametrized, fully-tested modules — no magic numbers in solver code.
 
 ## Bottom-effect result
@@ -105,12 +111,61 @@ Reproduce both paper thicknesses with one command:
 ```bash
 python examples/paper_reproduction.py           # writes results/{h7,h14}.csv + PNGs
 python examples/hertz_validation.py             # thick-film Hertz check
+python examples/mofem_cross_check.py            # MoFEM's axisymmetric benchmark; mesh-scatter floor
 python examples/synthetic_analysis.py           # realistic dataset -> modulus recovery
 python examples/publication_figure.py           # journal-ready multi-panel figure (PDF/PNG/SVG)
 python examples/model_comparison.py              # Hertz/Garcia/Dimitriadis/Chadwick vs FEM
 python examples/chadwick_verification.py         # incompressible (nu=0.5) mixed FEM -> Chadwick
 python examples/field_heatmap.py                 # von Mises / displacement field heatmaps
+python examples/force_volume.py                  # synthetic force map over a two-phase sample; round-trip
+python examples/viscoelastic_sweep.py            # dynamic moduli E'(w)/E''(w) vs closed-form SLS
+python examples/force_volume_video.py            # video: tip inserting pixel-by-pixel, map filling in
+python examples/fem_insertions_video.py          # video: real FEM von Mises field, several insertions
+python examples/afm_recovery_video.py            # video: viscoelastic recovery limits between lateral pokes
+python examples/afm_recovery_compare.py          # video: viscoelastic vs more-elastic recovery, side by side
 ```
+
+### Force volume and viscoelasticity
+
+Force is exactly proportional to modulus (`F = E·φ(δ)`, verified to 0.0000% over a
+400× range), so one FEM solve builds the geometric kernel `φ` and everything else
+is analytic scaling of it:
+
+```python
+import numpy as np
+from nanoindent import SimulationConfig, forcemap as fm, viscoelastic as ve
+
+cfg  = SimulationConfig(R=20, nu=0.5, h=6, formulation="mixed", delta_max=1.5)
+spec = fm.ForceVolumeSpec(64, 64, pitch_nm=8, ramp_freq_hz=2, z_amplitude_nm=1.2)
+E    = fm.two_phase_field(64, 64, E_soft=2.0, E_stiff=20.0)   # stiff domains in soft matrix
+vol  = fm.simulate_force_volume(spec, E, cfg)                 # 4096 curves, ONE solve
+E_map = vol.recover_modulus_map(model="kernel")              # round-trip: recover the input
+
+# frequency-dependent (viscoelastic) modulus via the correspondence principle
+sls  = ve.standard_linear_solid(E0=30, E_inf=10, tau=1e-3)   # MPa, MPa, s
+spectrum = ve.frequency_sweep(sls, vol.kernel.phi_of,
+                              lambda d0: ve.kernel_slope(vol.kernel.phi_of, d0),
+                              omegas=2*3.14159*np.logspace(0, 4, 20),
+                              delta0=1.0, delta_amp=0.05)
+spectrum.max_rel_error()   # recovered E'(w),E''(w) vs closed form: ~1e-3
+```
+
+Two videos animate this (click to view):
+
+- [**Force-map acquisition**](docs/force_volume_video.mp4) — the tip inserting
+  pixel by pixel, the force curve reflecting local stiffness, the modulus map
+  filling in.
+- [**Real FEM field, several insertions**](docs/fem_insertions_video.mp4) — the
+  actual von Mises stress field on the cross-section as the tip indents soft and
+  stiff regions in turn.
+- [**Recovery between pokes**](docs/afm_recovery_video.mp4) — on one viscoelastic
+  material, the tip doing down-up cycles and stepping laterally; the surface
+  profile shows residual dents that haven't sprung back before the next poke, with
+  a limit map of where (lateral pitch × scan frequency) recovery fails.
+- [**Viscoelastic vs elastic**](docs/afm_recovery_compare.mp4) — the same scan on
+  a viscoelastic material (persistent trough) and a more elastic one (recovers
+  cleanly, fresh material at every poke), set by the viscous fraction β = 1 −
+  E_inf/E0.
 
 ### Publication-quality figures
 

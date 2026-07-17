@@ -217,6 +217,58 @@ Note the two 2002 papers are distinct: Dimitriadis et al. is the empirical
 polynomial for finite-thickness bonded/free films; Chadwick is the thin
 incompressible layer law.
 
+### 6.3 One cross-check against another code, and what it was worth
+
+§6.2 argues another FEM code is not ground truth. That argument was tested rather
+than assumed, once, against [MoFEM](https://mofem.eng.gla.ac.uk) (MIT, Glasgow).
+Its ADV-1 atom test `hertz_mfront_2d_axisymm_flat` is this problem — an exact-sphere
+SDF indenting a flat axisymmetric linear-elastic body — reached by a different
+route: augmented-Lagrangian contact with an H(div) traction field, against our
+penalty and active-set Newton. `examples/mofem_cross_check.py` runs our solver at
+its configuration (`R=100, δ=0.01, E=1e3, ν=0.4`, domain radius 50 × depth 100).
+
+| | `F/F_Hertz` |
+|---|---|
+| MoFEM (augmented Lagrangian, H(div)) | `0.99703` (−0.30%) |
+| this library (penalty, P2) | `0.99591 … 1.00281` (±0.34%) |
+
+**The verdict is that §6.2 was right.** MoFEM's −0.30% lands *inside* our own mesh
+scatter, so the second code separated nothing: it could not distinguish our error
+from its own, and agreeing with it added no information that Hertz had not already
+supplied. Both codes were measured against the analytic ruler; the ruler did the
+work. This is recorded as a null result, not a validation.
+
+Three things did come out of it, none of which required MoFEM to be right:
+
+- **The penalty is not setting the answer.** `penalty_alpha` 400 → 1000 moves `F`
+  by 0.02%. §6.1's penalty study says to earn the free parameter; this is that
+  study's conclusion stated as a number. It also retires augmented-Lagrangian
+  contact as a thing worth implementing here — the formulation MoFEM uses to avoid
+  the free parameter buys nothing our sweep does not already show is absent.
+- **The mesh sweep does not converge, it oscillates** (1.0028 → 1.0002 → 0.9970 →
+  0.9959 → 1.0000 → 1.0015). Refinement does not settle it because the active set
+  changes *discretely* — facets enter and leave contact — so `F` carries a noise
+  floor rather than a converging error. §6.1's "converges < 0.5%" is satisfied but
+  reads more favourably than the data deserves: it is ±0.34% of scatter, not
+  0.34% of remaining discretisation error. **Do not quote this solver tighter than
+  ~±0.35% on `F`.** A monotonicity assertion guards this in the example.
+- **The exact-sphere term of §3.1 is real and now has a size.** At MoFEM's shallow
+  `δ/R = 1e-4` we sit on Hertz (±0.3%); at the library's own `δ/R = 0.059`
+  (`R=17, δ=1`) we sit at +1.1%, above the noise floor. An exact sphere is stiffer
+  than the parabola Hertz assumes, and the deviation appears only with depth —
+  which is the signature §3.1 predicts, and evidence that the +1.1% is physics
+  rather than error.
+
+**Reproducing the MoFEM side** (not needed for the example, which records its
+result): `likask/mofem-spack-jupyterhub:0.15.0`, amd64 only. Two traps. Its meshes
+are pre-partitioned — `hertz_2d_4p.h5m` needs `mpirun -np 4`, and on one rank it
+returns zero force *silently* rather than erroring. And its axisymmetric path is
+hard-gated behind MFront (`MOFEM_NOT_IMPLEMENTED` otherwise), whose shipped
+`libBehaviour.so` is compiled with AVX2/FMA that **Rosetta 2 cannot execute**;
+either disable Rosetta in Docker Desktop so qemu handles it, or rebuild the
+behaviour (`mfront --obuild --interface=generic LinearElasticity.mfront` with
+`-march=x86-64 -mno-avx -mno-avx2 -mno-fma`).
+
 ---
 
 ## 7. Judgement calls, stated
@@ -235,7 +287,123 @@ constant, and each is worth revisiting per problem:
 
 ---
 
-## 8. Backends
+## 8. Force volume and viscoelasticity, from one solve
+
+Both extensions rest on a single measured fact: **the indentation force is exactly
+proportional to the modulus.** At fixed geometry, `F(δ; E) = E · φ(δ)`, where `φ`
+is a purely geometric kernel (tip radius, film thickness, ν, mesh — but not E).
+This is not an approximation to check later; it is exact linear elasticity, and
+the solver reproduces it to `0.0000%` across a 400× range of E (the penalty
+`k_pen = α·E/h_local` scales with E too, so the whole discrete system scales and
+`φ = F/E` is E-independent). The von Mises **field** is likewise `E`-linear at
+fixed δ (displacements are E-independent under displacement-controlled contact;
+stress `= C(E):ε ∝ E`).
+
+Everything below is bookkeeping on top of that one fact.
+
+### 8.1 Force volume (`forcemap.py`)
+
+A force map is an `n×n` grid of force curves at spatial pitch `X` and ramp
+frequency `Y`. Because `F = E·φ`, one FEM solve gives `φ`, and every pixel — any
+modulus field, heterogeneous or continuous — is an exact analytic scaling of it.
+A 64×64 map costs **one solve, not 4096**. `simulate_force_volume` emits raw
+`(z, deflection)` curves (the calibration inverted: `d = F/k`, `z = z₀+δ+d`), so a
+`ForceVolume` is a drop-in for the ordinary inverse analysis and the map
+*round-trips*: generate at a known modulus field, recover it, compare.
+
+Two recovery paths, and what each is for:
+- **`model="kernel"`** fits against `φ` itself. Since the curves *are* `E·φ`, this
+  recovers E to the contact-point scan's resolution (~a few %). It validates the
+  machinery — timing, calibration inversion, scaling — independently of any
+  analytic model.
+- **`model="hertz"` / `"dimitriadis"` / …** fit against the closed forms, and so
+  surface *their* error. On a thin bonded film Hertz reads ~2–4× high (the bottom
+  effect of §3/§6.2, now as a whole map); the finite-thickness corrections much
+  less. The force-map view makes the artefact spatial and unmissable.
+
+**Frequency `Y` sets the time base only** for an elastic sample: ramp velocity
+`2·z_amp·Y`, per-pixel time `1/Y`, scan time, timestamps. It does *not* change the
+forces — there is no rate term in the elastic constitutive law. Rate dependence is
+§8.2, and keeping the two separate is deliberate: conflating acquisition timing
+with material response is a common way to misread fast force maps.
+
+### 8.2 Viscoelasticity by correspondence (`viscoelastic.py`)
+
+Rate/frequency dependence of the modulus itself is viscoelasticity. The bridge is
+again `F = E·φ`: the elastic–viscoelastic **correspondence principle** (Lee & Radok
+1960) replaces the constant modulus by a hereditary convolution with the material's
+relaxation function `E(t)`:
+
+    F(t) = ∫₀ᵗ E(t − t') d/dt'[ φ(δ(t')) ] dt'.
+
+This is exact for a linear viscoelastic solid during monotonic loading (growing
+contact; Ting 1966 handles receding contact on unload, out of scope), and it
+inherits the FEM kernel's geometry — finite thickness, bottom effect, exact sphere
+— which the textbook Hertz-based viscoelastic formulae do not carry. `E(t)` is a
+Prony series (SLS, generalized Maxwell); the convolution is evaluated by the exact
+first-order recurrence for exponential kernels (one internal variable per branch,
+O(N), no growing sum).
+
+Driving `δ(t)` sinusoidally and projecting the steady-state force onto sine/cosine
+recovers the storage and loss moduli `E'(ω)`, `E''(ω)`. **Validation is against the
+closed-form complex modulus** `E*(ω) = E_inf + Σ Eₖ (iωτₖ)/(1+iωτₖ)`, keeping to
+§6.2's standard — recovery matches to `0.10%` even through the FEM kernel's
+geometric nonlinearity (small-amplitude oscillation about an operating depth,
+normalised by the local kernel slope). The time-domain view is a ramp-and-hold
+stress-relaxation curve decaying from the glassy `E₀` toward the equilibrium
+`E_inf`.
+
+### 8.3 Recovery between consecutive indentations (`recovery.py`)
+
+An AFM force map indents, retracts, steps a few nm laterally, and indents again.
+On an elastic sample that is fine — the surface springs back the instant the tip
+lifts, so consecutive pokes are independent. On a **viscoelastic** sample it is
+not: the surface recovers over `tau`, so a poke that comes too soon (fast scan) or
+too close (small lateral step) lands on material still dented by the previous one.
+This is a real source of correlation/hysteresis in fast or dense force volume, and
+`recovery.py` locates its limits.
+
+Two ingredients, each honest about where it comes from:
+
+- **Spatial footprint `s(r)`** — the normalised surface depression `u_z(r)/u_z(0)`,
+  read from one real FEM solve. It carries the bottom effect: on a bonded thin film
+  the dent is localised (here `s` is down to ~10% by ~1.5 contact radii and shows a
+  faint pile-up ring just outside contact), far tighter than a half-space. So the
+  *spatial* limit — the pitch beyond which the previous dent simply does not reach —
+  is ~1.5 a, set by the FEM, not assumed.
+- **Temporal recovery** — an **imprint-then-recover** model: contact is fast (the
+  material deforms with its glassy modulus, imprinting `δ_max·s`), then the residual
+  relaxes freely as `exp(−t/τ)`. This is the right asymmetry for AFM (fast load, slow
+  recovery); a single symmetric `dA/dt` law would wrongly make the material fail to
+  deform during a quick contact.
+
+Because the solver is axisymmetric, it cannot place two laterally-separated indents
+in one solve. The raster is built by **linear superposition** of the FEM footprint
+at each site — valid in the same small-strain linear regime as everything else, and
+labelled a reduced-order model, not a 3-D solve. The time-domain raster
+(`raster_surface`) and the closed-form steady-state overlap (`residual_fraction`,
+summing `s(k·pitch)·exp(−(k/f)/τ)` over prior pokes) agree, and `recovery_limit_map`
+sweeps pitch × frequency to draw the boundary. The upshot is a two-limit rule:
+a poke sees fresh material if the step exceeds ~1.5 a **or** the interval exceeds a
+few `τ`; it does not if both are small.
+
+### 8.4 What is *not* modelled
+
+The force-volume timing is kinematic, not a coupled cantilever dynamics model
+(no tip inertia or hydrodynamic drag — irrelevant at the elastic quasi-static
+limit, but they matter for true high-speed AFM and are not here). Viscoelastic
+unloading uses the loading (Lee–Radok) form, not Ting's receding-contact
+correction. The recovery raster (§8.3) is a linear superposition of the
+axisymmetric footprint with a single-`τ` recovery law — a reduced-order stand-in
+for a genuine 3-D two-indent solve, good for scoping the limits, not for the exact
+stress field between two adjacent dents. None of the three extensions adds a new
+solver: all are transforms of the one elastic kernel, which is why they are cheap
+and why they validate against closed forms (or, for recovery, an internal
+ODE-vs-analytic cross-check) rather than against another code.
+
+---
+
+## 9. Backends
 
 **Target: FEniCSx/dolfinx + gmsh. Shipped: scikit-fem.**
 
@@ -254,7 +422,7 @@ directly instead of requiring gmsh.
 
 ---
 
-## 9. Related documents
+## 10. Related documents
 
 - `README.md` — usage, results, validation tables.
 - `docs/methodology_msnl_bio_dc.md` — Methods text (Biophysical Journal style) for

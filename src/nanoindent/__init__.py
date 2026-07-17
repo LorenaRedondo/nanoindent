@@ -33,6 +33,22 @@ from .experiment import (
     read_bruker, analyze_experiment, synthetic_raw_curve, JPKForceMap,
 )
 from . import slb
+from . import forcemap
+from .forcemap import (
+    ForceVolumeSpec, ForceVolume, GeometricKernel, geometric_kernel,
+    simulate_force_volume, uniform_field, two_phase_field, gradient_field,
+)
+from . import viscoelastic
+from .viscoelastic import (
+    RelaxationModel, standard_linear_solid, generalized_maxwell,
+    hereditary_force, ramp_hold_curve, frequency_sweep, DynamicSpectrum,
+    kernel_slope,
+)
+from . import recovery
+from .recovery import (
+    SurfaceFootprint, surface_footprint, RasterRecovery, raster_surface,
+    residual_fraction, recovery_limit_map,
+)
 from . import lipids
 from .lipids import (
     LipiverseClient, MembranePrediction, MockLipiverseTransport, fetch_membrane,
@@ -102,6 +118,34 @@ __all__ = [
     "synthetic_raw_curve",
     "JPKForceMap",
     "slb",
+    # force-volume (force-map) generation
+    "forcemap",
+    "ForceVolumeSpec",
+    "ForceVolume",
+    "GeometricKernel",
+    "geometric_kernel",
+    "simulate_force_volume",
+    "uniform_field",
+    "two_phase_field",
+    "gradient_field",
+    # viscoelastic / dynamic mechanics
+    "viscoelastic",
+    "RelaxationModel",
+    "standard_linear_solid",
+    "generalized_maxwell",
+    "hereditary_force",
+    "ramp_hold_curve",
+    "frequency_sweep",
+    "DynamicSpectrum",
+    "kernel_slope",
+    # recovery between consecutive indentations
+    "recovery",
+    "SurfaceFootprint",
+    "surface_footprint",
+    "RasterRecovery",
+    "raster_surface",
+    "residual_fraction",
+    "recovery_limit_map",
     "lipids",
     "LipiverseClient",
     "MembranePrediction",

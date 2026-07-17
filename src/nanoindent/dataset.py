@@ -198,6 +198,7 @@ def fit_modulus(
     contact_point: Optional[float] = None,
     baseline: Optional[float] = None,
     fit_contact_point: bool = False,
+    shape: Optional[Callable] = None,
 ) -> ModulusFit:
     """Recover the elastic modulus from a force curve with the given model.
 
@@ -214,10 +215,16 @@ def fit_modulus(
         and pick the one minimising the fit RMSE — mimicking the contact-point
         determination step of a real AFM analysis. If a ``contact_point`` is
         given it is held fixed.
+    shape:
+        Optional ``delta -> force/E`` callable overriding the named model's
+        shape function. Used to fit against a non-analytic reference (e.g. an
+        FEM geometric kernel) with the same contact-point scan and closed-form
+        least squares; ``model`` is then just a label.
     """
     delta = np.asarray(delta, dtype=float)
     force = np.asarray(force, dtype=float)
-    shape = _shape_function(model, R, nu, h)
+    if shape is None:
+        shape = _shape_function(model, R, nu, h)
 
     def baseline_at(cp: float) -> float:
         if baseline is not None:
