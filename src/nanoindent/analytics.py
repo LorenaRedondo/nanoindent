@@ -22,6 +22,8 @@ contact-radius regime (``a <~ h`` is comfortable; the polynomials degrade as
 from __future__ import annotations
 
 from dataclasses import dataclass
+import warnings
+
 import numpy as np
 
 
@@ -44,15 +46,81 @@ def hertz_force(delta, R: float, E: float, nu: float) -> np.ndarray:
 # limit nu -> 1/2.  We keep the E_star prefactor and fold the nu-dependence
 # into alpha0/beta0 so the models reduce to Hertz as h -> inf for any nu.
 
+# Published incompressible (nu = 1/2) tabulations.  These are the anchors: the
+# general-nu machinery below is required to reproduce them at nu = 1/2, which
+# ``tests/test_analytics.py`` enforces against an independent implementation of
+# the same paper (``nanoindent.dynamo_v1.correction_factors``).
+
+#: Dimitriadis 2002 **Eq. 12** — bonded film, nu = 1/2.  Orders chi^0..chi^4.
+DIMITRIADIS_BONDED_INCOMPRESSIBLE = (1.0, 1.133, 1.283, 0.769, 0.0975)
+
+#: Dimitriadis 2002 **Eq. 11** — free (not bonded) film, nu = 1/2.
+DIMITRIADIS_NOT_BONDED_INCOMPRESSIBLE = (1.0, 0.884, 0.781, 0.386, 0.0048)
+
+# The free-film alpha0/beta0 are only published for nu = 1/2, so they are
+# back-solved from Eq. 11 rather than guessed:
+#   alpha0 from the chi^1 coefficient  -> -0.884*pi/2
+#   beta0  from the chi^3 coefficient
+# The chi^2 coefficient is then *predicted*, not fitted, and comes out 0.7815
+# against a published 0.781 — an independent confirmation that Eq. 11 uses the
+# same series structure as Eq. 12.
+_FREE_ALPHA0_NU_HALF = -0.884 * np.pi / 2.0
+_FREE_BETA0_NU_HALF = (
+    (0.386 / -(8.0 / np.pi ** 3)) - _FREE_ALPHA0_NU_HALF ** 3
+) / (4.0 * np.pi ** 2 / 15.0)
+
+# Sign of the chi^4 term relative to the alpha0/beta0 formula.
+#
+# For the *free* film the formula reproduces Eq. 11 directly (+0.0044 against a
+# published +0.0048).  For the *bonded* film it yields -0.0975 where Eq. 12
+# tabulates +0.0975: the magnitude agrees to four significant figures, so this
+# is a sign inconsistency between the paper's general-nu expression and its own
+# tabulation, not a transcription error here.  The tabulated sign wins — it is
+# what the AFM literature uses, and a bonded film must stiffen monotonically.
+# The term is worth 0.3% of the correction at chi = 0.5 and 2.3% at chi = 1,
+# i.e. it is negligible across the model's stated validity range either way.
+_ORDER4_SIGN = {True: -1.0, False: +1.0}
+
+
 def _dimitriadis_alpha_beta(nu: float, bonded: bool) -> tuple[float, float]:
-    """Return the ``(alpha0, beta0)`` coefficients of Dimitriadis 2002."""
+    """Return the ``(alpha0, beta0)`` coefficients of Dimitriadis 2002.
+
+    The bonded pair is the paper's general-nu expression; it reproduces Eq. 12
+    exactly at nu = 1/2.  The free pair is published only for nu = 1/2, so it is
+    held at that value and a warning is emitted for other nu — the previous
+    implementation extrapolated with coefficients that were wrong by a factor
+    of four at leading order (0.203 against a published 0.884).
+    """
+    if not -1.0 < nu < 1.0:
+        raise ValueError(f"nu must be in (-1, 1), got {nu!r}")
     if bonded:
         alpha0 = -(1.2876 - 1.4678 * nu + 1.3442 * nu ** 2) / (1.0 - nu)
         beta0 = (0.6387 - 1.0277 * nu + 1.5164 * nu ** 2) / (1.0 - nu)
-    else:  # free (not bonded) top film on a frictionless rigid substrate
-        alpha0 = -(0.347 - 0.056 * nu + 0.0 * nu ** 2)
-        beta0 = (0.1636 - 0.0 * nu)
-    return alpha0, beta0
+        return alpha0, beta0
+
+    if abs(nu - 0.5) > 1e-6:
+        warnings.warn(
+            f"Dimitriadis 2002 publishes the free-film (not bonded) "
+            f"coefficients only for nu = 1/2; using them at nu = {nu} treats "
+            "the film as incompressible. Use bonded=True for the general-nu "
+            "form, or garcia_bec_force.",
+            stacklevel=4,
+        )
+    return _FREE_ALPHA0_NU_HALF, _FREE_BETA0_NU_HALF
+
+
+def _dimitriadis_poly(chi, nu: float, bonded: bool):
+    """The quartic bottom-effect polynomial ``P(chi)`` of Dimitriadis 2002."""
+    alpha0, beta0 = _dimitriadis_alpha_beta(nu, bonded)
+    return (
+        1.0
+        - (2.0 * alpha0 / np.pi) * chi
+        + (4.0 * alpha0 ** 2 / np.pi ** 2) * chi ** 2
+        - (8.0 / np.pi ** 3)
+        * (alpha0 ** 3 + (4.0 * np.pi ** 2 / 15.0) * beta0) * chi ** 3
+        + _ORDER4_SIGN[bool(bonded)] * (16.0 * alpha0 / np.pi ** 4)
+        * (alpha0 ** 3 + (3.0 * np.pi ** 2 / 5.0) * beta0) * chi ** 4
+    )
 
 
 def dimitriadis_force(delta, R: float, E: float, nu: float, h: float,
@@ -63,45 +131,54 @@ def dimitriadis_force(delta, R: float, E: float, nu: float, h: float,
     ----------
     bonded:
         ``True`` for a film bonded to the substrate (default; matches the
-        reference problem), ``False`` for a frictionless / free film.
+        reference problem), ``False`` for a frictionless / free film.  The free
+        form is published for ``nu = 1/2`` only and warns otherwise.
 
     The correction multiplies the Hertz force by a quartic polynomial in
-    ``chi = sqrt(R*delta)/h``.
+    ``chi = sqrt(R*delta)/h``.  At ``nu = 1/2`` it reproduces the tabulated
+    :data:`DIMITRIADIS_BONDED_INCOMPRESSIBLE` /
+    :data:`DIMITRIADIS_NOT_BONDED_INCOMPRESSIBLE` coefficients.
     """
     delta = np.asarray(delta, dtype=float)
     chi = np.sqrt(R * np.clip(delta, 0.0, None)) / h
-    alpha0, beta0 = _dimitriadis_alpha_beta(nu, bonded)
-
-    poly = (
-        1.0
-        - (2.0 * alpha0 / np.pi) * chi
-        + (4.0 * alpha0 ** 2 / np.pi ** 2) * chi ** 2
-        - (8.0 / np.pi ** 3)
-        * (alpha0 ** 3 + (4.0 * np.pi ** 2 / 15.0) * beta0) * chi ** 3
-        + (16.0 * alpha0 / np.pi ** 4)
-        * (alpha0 ** 3 + (3.0 * np.pi ** 2 / 5.0) * beta0) * chi ** 4
-    )
-    return hertz_force(delta, R, E, nu) * poly
+    return hertz_force(delta, R, E, nu) * _dimitriadis_poly(chi, nu, bonded)
 
 
-# Widely tabulated incompressible (nu -> 1/2) bonded coefficients.  These are
-# the numbers most AFM codes hard-code; exposed for reference / cross-check.
-DIMITRIADIS_BONDED_INCOMPRESSIBLE = (1.0, 1.133, 1.497, 1.469, 0.755)
+def _tabulated_force(delta, R: float, E: float, h: float, coeffs) -> np.ndarray:
+    """``F = (16/9) E sqrt(R) delta^1.5 * sum(c_k chi^k)`` at ``nu = 1/2``.
+
+    The ``(16/9) E`` prefactor is ``(4/3) E_star`` evaluated at ``nu = 1/2``.
+    """
+    delta = np.asarray(delta, dtype=float)
+    d = np.clip(delta, 0.0, None)
+    chi = np.sqrt(R * d) / h
+    poly = sum(c * chi ** k for k, c in enumerate(coeffs))
+    return (16.0 / 9.0) * E * np.sqrt(R) * d ** 1.5 * poly
 
 
 def dimitriadis_bonded_incompressible(delta, R: float, E: float,
                                       h: float) -> np.ndarray:
-    """Bonded, incompressible (nu = 1/2) Dimitriadis force using the classic
-    tabulated coefficients ``[1, 1.133, 1.497, 1.469, 0.755]``.
+    """Bonded, incompressible (nu = 1/2) Dimitriadis force, Eq. 12.
 
-    ``F = (16/9) E sqrt(R) delta^1.5 * sum(c_k chi^k)``, ``chi=sqrt(R delta)/h``.
+    Uses the tabulated coefficients ``[1, 1.133, 1.283, 0.769, 0.0975]``.
+    Note these differ from Garcia & Garcia's ``[1, 1.133, 1.497, 1.469,
+    0.755]`` from the chi^2 term onward — the two papers give genuinely
+    different series, and conflating them inflates the correction by ~30% at
+    chi = 1.
     """
-    delta = np.asarray(delta, dtype=float)
-    chi = np.sqrt(R * np.clip(delta, 0.0, None)) / h
-    c = DIMITRIADIS_BONDED_INCOMPRESSIBLE
-    poly = c[0] + c[1] * chi + c[2] * chi ** 2 + c[3] * chi ** 3 + c[4] * chi ** 4
-    prefactor = (16.0 / 9.0) * E * np.sqrt(R) * np.clip(delta, 0.0, None) ** 1.5
-    return prefactor * poly
+    return _tabulated_force(delta, R, E, h, DIMITRIADIS_BONDED_INCOMPRESSIBLE)
+
+
+def dimitriadis_not_bonded_incompressible(delta, R: float, E: float,
+                                          h: float) -> np.ndarray:
+    """Free (not bonded), incompressible (nu = 1/2) Dimitriadis force, Eq. 11.
+
+    Uses the tabulated coefficients ``[1, 0.884, 0.781, 0.386, 0.0048]``.  A
+    film free to slide on the substrate stiffens less than a bonded one, so
+    this sits below :func:`dimitriadis_bonded_incompressible` at every depth.
+    """
+    return _tabulated_force(delta, R, E, h,
+                            DIMITRIADIS_NOT_BONDED_INCOMPRESSIBLE)
 
 
 # -- Garcia & Garcia 2018 ----------------------------------------------------
@@ -145,6 +222,30 @@ def chadwick_force(delta, R: float, E: float, h: float) -> np.ndarray:
     """
     delta = np.asarray(delta, dtype=float)
     return (2.0 * np.pi / 3.0) * E * R ** 2 * np.clip(delta, 0.0, None) ** 3 / h ** 3
+
+
+def chadwick_unbonded_force(delta, R: float, E: float, nu: float,
+                            h: float) -> np.ndarray:
+    """Chadwick thin-layer force, paraboloid on an **unbonded** film.
+
+    A film free to slide on a frictionless substrate cannot be squeezed
+    laterally the way a bonded one is, so the thin-film stiffening is one power
+    of ``h`` weaker than the bonded case: ``F ~ delta**2 / h`` rather than
+    ``delta**3 / h**3``. Written as a correction to Hertz it is a single term,
+
+        F = F_Hertz * (3*pi/8) * chi,      chi = sqrt(R*delta)/h
+
+    which collapses to the closed form ``F = (pi/2) * E_star * R * delta**2 / h``.
+
+    Like :func:`chadwick_force` this is a lubrication-limit **asymptote**: the
+    correction factor tends to 0, not 1, as ``h`` grows, so it is only
+    meaningful for ``chi >> 1`` and *under*-predicts a thick film. See
+    :func:`nanoindent.dynamo_v1.correction_factors.chadwick_regime`.
+    """
+    delta = np.asarray(delta, dtype=float)
+    d = np.clip(delta, 0.0, None)
+    E_star = E / (1.0 - nu ** 2)
+    return (np.pi / 2.0) * E_star * R * d ** 2 / h
 
 
 def connell_force(delta, R: float, kappa_A: float, bilayer_thickness: float) -> np.ndarray:
@@ -216,11 +317,17 @@ def model_registry() -> dict:
     def _dimitriadis_incompressible(delta, cfg):
         return dimitriadis_bonded_incompressible(delta, cfg.R, cfg.E, cfg.h)
 
+    def _dimitriadis_free(delta, cfg):
+        return dimitriadis_force(delta, cfg.R, cfg.E, cfg.nu, cfg.h, bonded=False)
+
     def _garcia(delta, cfg):
         return garcia_bec_force(delta, cfg.R, cfg.E, cfg.nu, cfg.h)
 
     def _chadwick(delta, cfg):
         return chadwick_force(delta, cfg.R, cfg.E, cfg.h)
+
+    def _chadwick_unbonded(delta, cfg):
+        return chadwick_unbonded_force(delta, cfg.R, cfg.E, cfg.nu, cfg.h)
 
     return {
         "hertz": AnalyticModel("hertz", "Hertz (half-space)", _hertz),
@@ -232,17 +339,30 @@ def model_registry() -> dict:
             "Dimitriadis (bonded, nu=0.5)",
             _dimitriadis_incompressible,
         ),
+        "dimitriadis_free": AnalyticModel(
+            "dimitriadis_free", "Dimitriadis 2002 (free/unbonded)",
+            _dimitriadis_free,
+        ),
         "garcia_bec": AnalyticModel(
             "garcia_bec", "Garcia & Garcia 2018 BEC", _garcia
         ),
         "chadwick_2002": AnalyticModel(
-            "chadwick_2002", "Chadwick 2002 (thin incompressible)", _chadwick
+            "chadwick_2002", "Chadwick 2002 (bonded)", _chadwick
+        ),
+        "chadwick_unbonded": AnalyticModel(
+            "chadwick_unbonded", "Chadwick 2002 (unbonded)", _chadwick_unbonded
         ),
     }
 
 
 # Convenience grouping for the common "compare all corrections" request.
 BEC_MODELS = ["hertz", "garcia_bec", "dimitriadis_bonded", "chadwick_2002"]
+
+#: The six-model comparison used for the bilayer work: half-space, both
+#: bottom-effect polynomials, and both thin-film asymptotes, each in its bonded
+#: and unbonded form where the distinction exists.
+SIX_MODELS = ["hertz", "garcia_bec", "dimitriadis_bonded", "dimitriadis_free",
+              "chadwick_2002", "chadwick_unbonded"]
 
 
 def compare_models(cfg, delta=None, models=None) -> dict:

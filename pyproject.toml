@@ -35,6 +35,14 @@ video = ["Pillow>=9.0", "imageio-ffmpeg>=0.4"]   # HS-AFM movies: TIFF reader + 
 docs = ["python-docx>=1.0", "python-pptx>=1.0", "Pillow>=9.0"]   # .docx / .pptx export (examples/msnl_bio_dc_unbonded_5nm.py, model_slides.py)
 tracking = ["mlflow>=2.0"]   # optional MLflow export (nanoindent.tracking.log_run_to_mlflow)
 web = ["streamlit>=1.30"]   # interactive dashboard (dashboard/app.py)
+# DyNaMo bilayer BEC chain (nanoindent.dynamo_v0 / dynamo_v1). lmfit drives the
+# Hertz+BEC fits; pandas backs the ratio-of-variances contact-point method;
+# tifffile / nptdms are needed only by the vendored readers' image and
+# thermal-noise paths.
+dynamo = ["lmfit>=1.2", "pandas>=1.5", "tifffile>=2023.1", "nptdms>=1.7"]
+# Re-running examples/bec_dopc_chi_master_curve.ipynb. The .py alongside it is
+# the authoring source; the .ipynb is generated and executed from it.
+notebooks = ["jupyter>=1.0", "nbformat>=5.9", "nbconvert>=7.0", "ipykernel>=6.0"]
 
 [project.scripts]
 nanoindent-control = "nanoindent.control:main"
@@ -45,6 +53,12 @@ Homepage = "https://github.com/alpibrusl/afm-finite-elements"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# Ship the vendored chain's licences and its defect register alongside the code
+# they describe — dynamo_v0 is a verbatim third-party snapshot, so the
+# attribution and the "do not fix anything here" note must travel with it.
+"nanoindent.dynamo_v0" = ["LICENSE-*.txt", "PROVENANCE.md", "CHECKSUMS.sha256"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

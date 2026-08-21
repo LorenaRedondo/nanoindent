@@ -20,7 +20,10 @@ from nanoindent import SimulationConfig, IndentationSolver, analytics
 # -- analytic anchors (exact closed forms) -----------------------------------
 @pytest.mark.parametrize("fn, args, expected", [
     (analytics.hertz_force, (1.0, 17.0, 130.0, 0.3), 785.353452498602),
-    (analytics.dimitriadis_force, (1.0, 17.0, 130.0, 0.3, 7.0), 1412.8746095837907),
+    # Updated 2026-08-21: the previous value 1412.8746095837907 was produced
+    # with a sign error on the chi^4 term of the Dimitriadis series, which
+    # made a bonded film soften at 4th order. +3.96% at these parameters.
+    (analytics.dimitriadis_force, (1.0, 17.0, 130.0, 0.3, 7.0), 1468.850251298797),
     (analytics.chadwick_force, (1.0, 17.0, 130.0, 7.0), 229.40648395601272),
     (analytics.sneddon_cone_force, (1.0, 70.3, 130.0, 0.3), 254.00143853054578),
 ])

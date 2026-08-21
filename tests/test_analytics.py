@@ -50,6 +50,72 @@ def test_incompressible_tabulated_coefficients():
     assert F == pytest.approx(expected, rel=1e-4)
 
 
+# -- Dimitriadis 2002 coefficient anchors ------------------------------------
+# The general-nu alpha0/beta0 machinery must reproduce the paper's own
+# tabulations at nu = 1/2. These caught three real errors: the bonded chi^4
+# sign, free-film coefficients wrong by 4x at leading order, and
+# DIMITRIADIS_BONDED_INCOMPRESSIBLE holding Garcia's series instead.
+
+def _poly_coeffs(nu, bonded):
+    """Recover [c0..c4] of P(chi) by fitting the evaluated polynomial."""
+    x = np.linspace(0.01, 1.0, 9)
+    return np.polyfit(x, analytics._dimitriadis_poly(x, nu, bonded), 4)[::-1]
+
+
+@pytest.mark.parametrize("bonded,published", [
+    (True, analytics.DIMITRIADIS_BONDED_INCOMPRESSIBLE),
+    (False, analytics.DIMITRIADIS_NOT_BONDED_INCOMPRESSIBLE),
+])
+def test_general_nu_series_reproduces_published_tabulation(bonded, published):
+    got = _poly_coeffs(0.5, bonded)
+    # chi^4 is the least certain term (see _ORDER4_SIGN); it is worth <2.5% of
+    # the correction at chi = 1, so it gets a looser tolerance.
+    np.testing.assert_allclose(got[:4], published[:4], rtol=1e-3)
+    assert got[4] == pytest.approx(published[4], abs=5e-4)
+
+
+def test_bonded_chi4_coefficient_is_positive():
+    """A bonded film stiffens monotonically; a negative chi^4 term was a bug."""
+    assert _poly_coeffs(0.5, True)[4] > 0
+
+
+def test_dimitriadis_is_not_garcia():
+    """The two papers give different series; conflating them was the old bug."""
+    dim = analytics.DIMITRIADIS_BONDED_INCOMPRESSIBLE
+    gar = analytics.GARCIA_BONDED_COEFFS
+    assert dim[:2] == gar[:2]           # they agree to first order
+    assert dim[2:] != gar[2:]           # and diverge from chi^2 onward
+    assert sum(gar) / sum(dim) > 1.2    # ~30% apart at chi = 1
+
+
+def test_free_film_is_softer_than_bonded():
+    R, E, h = 17.0, 130.0, 7.0
+    d = np.linspace(0.1, 1.0, 8)
+    free = analytics.dimitriadis_force(d, R, E, 0.5, h, bonded=False)
+    bond = analytics.dimitriadis_force(d, R, E, 0.5, h, bonded=True)
+    hertz = analytics.hertz_force(d, R, E, 0.5)
+    assert np.all(hertz < free)
+    assert np.all(free < bond)
+
+
+def test_free_film_warns_away_from_incompressible():
+    with pytest.warns(UserWarning, match="only for nu = 1/2"):
+        analytics.dimitriadis_force(0.5, 17.0, 130.0, 0.3, 7.0, bonded=False)
+
+
+def test_matches_independent_implementation_of_the_same_paper():
+    """Cross-check against dynamo_v1, transcribed separately from the paper."""
+    pytest.importorskip("lmfit")
+    from nanoindent.dynamo_v1 import correction_factors as cf1
+    R, E, h = 20.0, 30.0, 5.0
+    d = np.linspace(0.01, 3.0, 40)
+    for bonded, fn in ((True, cf1.bec_dimitriadis_paraboloid_bonded),
+                       (False, cf1.bec_dimitriadis_paraboloid_not_bonded)):
+        ours = analytics.dimitriadis_force(d, R, E, 0.5, h, bonded=bonded)
+        theirs = analytics.hertz_force(d, R, E, 0.5) * fn(h, d, "paraboloid", R)
+        np.testing.assert_allclose(ours, theirs, rtol=1e-3)
+
+
 def test_sneddon_cone_scaling():
     # F ~ delta^2 for a cone; doubling delta quadruples F.
     F = analytics.sneddon_cone_force(np.array([0.5, 1.0]), 70.3, 130.0, 0.3)
