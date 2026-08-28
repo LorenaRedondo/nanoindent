@@ -100,6 +100,10 @@ omit = [
 # a runner; until that exists, a gate above 82 would only be passable by
 # excluding the untested modules from measurement, which hides the gap instead
 # of closing it.
+#
+# This assumes CI installs the `dynamo` extra. Without it the vendored chain
+# and everything above it skip entirely and the figure falls to 67% — a runner
+# reporting a passing suite that never ran the code under test. See ci.yml.
 precision = 1
 skip_covered = false
 exclude_lines = [

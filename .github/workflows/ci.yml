@@ -27,7 +27,11 @@ jobs:
       - name: Install package (scikit-fem backend) with test deps
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[test]"
+          # `dynamo` too: without lmfit, pandas and tifffile the whole vendored
+          # analysis chain and everything built on it skips silently, so the
+          # runner reports a passing suite that never exercised it. The tests
+          # exist; this is what makes CI run them.
+          pip install -e ".[test,dynamo]"
 
       - name: Run fast test suite with coverage
         run: |
