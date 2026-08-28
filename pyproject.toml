@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7.0", "igor2>=0.5", "hypothesis>=6.0"]
+test = ["pytest>=7.0", "pytest-cov>=4.0", "igor2>=0.5", "hypothesis>=6.0"]
 viz = ["pyvista>=0.40", "imageio-ffmpeg>=0.4"]   # imageio-ffmpeg: MP4 animations
 afm = ["igor2>=0.5"]   # Asylum Research .ibw reading
 video = ["Pillow>=9.0", "imageio-ffmpeg>=0.4"]   # HS-AFM movies: TIFF reader + MP4 export
@@ -66,3 +66,20 @@ markers = [
     "slow: physics-validation tests that run full simulations",
     "contract: cross-repo contract tests for the LIPIVERSE bridge; the live tier needs LIPIVERSE_URL",
 ]
+
+[tool.coverage.run]
+source = ["nanoindent"]
+branch = true
+
+[tool.coverage.report]
+precision = 1
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"

@@ -912,6 +912,16 @@ pytest -m slow           # physics validation (~15 s)
 pytest                   # everything
 ```
 
+Coverage (needs `pip install -e ".[test]"`, which pulls in `pytest-cov`):
+
+```bash
+pytest -m "not slow" --cov=nanoindent --cov-report=term-missing
+```
+
+CI runs the fast suite with branch coverage on every push/PR (`.github/workflows/ci.yml`),
+enforces an 85% floor (`--cov-fail-under=85`), and uploads the HTML/XML reports as build
+artifacts. Coverage settings live under `[tool.coverage.*]` in `pyproject.toml`.
+
 ---
 
 ## Package layout
