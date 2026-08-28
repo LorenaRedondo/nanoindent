@@ -40,10 +40,14 @@ def _shape_function(model: str, R: float, nu: float, h: float) -> Callable:
         return lambda d: analytics.hertz_force(d, R, 1.0, nu)
     if model in ("dimitriadis", "dimitriadis_bonded"):
         return lambda d: analytics.dimitriadis_force(d, R, 1.0, nu, h, bonded=True)
+    if model in ("dimitriadis_free", "dimitriadis_not_bonded"):
+        return lambda d: analytics.dimitriadis_force(d, R, 1.0, nu, h, bonded=False)
     if model == "garcia_bec":
         return lambda d: analytics.garcia_bec_force(d, R, 1.0, nu, h)
-    if model in ("chadwick", "chadwick_2002"):
+    if model in ("chadwick", "chadwick_2002", "chadwick_bonded"):
         return lambda d: analytics.chadwick_force(d, R, 1.0, h)
+    if model in ("chadwick_unbonded", "chadwick_not_bonded"):
+        return lambda d: analytics.chadwick_unbonded_force(d, R, 1.0, nu, h)
     raise ValueError(f"unknown model {model!r}")
 
 
