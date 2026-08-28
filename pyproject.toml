@@ -88,28 +88,6 @@ omit = [
 ]
 
 [tool.coverage.report]
-# The gate is 80, not the 85 this repository used before the DyNaMo work
-# landed, and the reason is worth stating rather than leaving as a number
-# somebody lowered.
-#
-# 85 was calibrated on a codebase of pure computation, where every line is
-# reachable from a unit test. The analysis chain added since is an
-# instrument-file pipeline: dynamo_compare, dynamo_v2.extract,
-# dynamo_v1.preprocessing and io.datasets all need real .jpk-force curves, and
-# the dataset is 2.3 GB and lives outside the repository. Measured on a
-# workstation that has it the suite reaches 82.6%; on a runner that does not,
-# 81.8% — the difference being exactly those file-reading paths.
-#
-# So 80 is what this suite can actually achieve in CI, not a relaxation of
-# standards for code that could be tested and is not. The way back up is a
-# committed sample curve (~16 kB) that would let the file-reading paths run on
-# a runner; until that exists, a gate above 82 would only be passable by
-# excluding the untested modules from measurement, which hides the gap instead
-# of closing it.
-#
-# This assumes CI installs the `dynamo` extra. Without it the vendored chain
-# and everything above it skip entirely and the figure falls to 67% — a runner
-# reporting a passing suite that never ran the code under test. See ci.yml.
 precision = 1
 skip_covered = false
 exclude_lines = [
