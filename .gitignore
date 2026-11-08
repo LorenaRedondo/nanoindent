@@ -27,3 +27,22 @@ env/
 .coverage
 .coverage.*
 htmlcov/
+
+# Never commit measured or instrument data. This repository ships code and
+# synthetic examples only; keep raw data outside the working tree.
+*.jpk-force
+*.jpk-force-map
+*.jpk-qi-data
+*.jpk
+*.ibw
+*.spm
+*.tdms
+*.nid
+*.h5
+*.hdf5
+*.npz
+*.tif
+*.tiff
+data/
+info/
+runs/

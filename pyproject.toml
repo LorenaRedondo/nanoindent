@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,14 +7,20 @@ name = "nanoindent"
 version = "0.1.0"
 description = "FEM simulation of AFM nanoindentation of thin elastic films by a rigid spherical tip"
 readme = "README.md"
-requires-python = ">=3.9"
-license = { text = "EUPL-1.2" }
-authors = [{ name = "nanoindent contributors" }]
+requires-python = ">=3.11"
+license = "EUPL-1.2"
+authors = [{ name = "alpibrupa" }]
+maintainers = [{ name = "alpibrupa" }]
+license-files = ["LICENSE"]
 keywords = ["AFM", "nanoindentation", "FEM", "contact mechanics", "Hertz", "thin film"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Physics",
-    "License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)",
 ]
 
 # Core dependencies. The primary FEM target is dolfinx (install via conda-forge,
@@ -28,13 +34,25 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7.0", "pytest-cov>=4.0", "igor2>=0.5", "hypothesis>=6.0"]
 viz = ["pyvista>=0.40", "imageio-ffmpeg>=0.4"]   # imageio-ffmpeg: MP4 animations
 afm = ["igor2>=0.5"]   # Asylum Research .ibw reading
 video = ["Pillow>=9.0", "imageio-ffmpeg>=0.4"]   # HS-AFM movies: TIFF reader + MP4 export
 docs = ["python-docx>=1.0", "python-pptx>=1.0", "Pillow>=9.0"]   # .docx / .pptx export (examples/msnl_bio_dc_unbonded_5nm.py, model_slides.py)
 tracking = ["mlflow>=2.0"]   # optional MLflow export (nanoindent.tracking.log_run_to_mlflow)
+report = ["pandas>=2.0"]   # rich tables in nanoindent.report
 web = ["streamlit>=1.30"]   # interactive dashboard (dashboard/app.py)
+
+[dependency-groups]
+# Development tooling, installed by default by `uv sync`.
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "hypothesis>=6.0",
+    "igor2>=0.5",   # exercises the Asylum .ibw reader in tests
+    "pandas>=2.0",  # nanoindent.report tables
+    "streamlit>=1.30",  # dashboard tests
+    "Pillow>=9.0",  # TIFF/video tests
+]
 
 [project.scripts]
 nanoindent-control = "nanoindent.control:main"
@@ -45,6 +63,9 @@ Homepage = "https://github.com/LorenaRedondo/nanoindent"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv]
+default-groups = ["dev"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
