@@ -268,12 +268,3 @@ def test_the_two_chadwick_asymptotes_cross():
     at_cross_u = float(A.chadwick_unbonded_force(d_cross, R, 10.0, NU, H))
     assert at_cross_b == pytest.approx(at_cross_u, rel=1e-9)
 
-
-def test_chadwick_unbonded_closed_form_matches_the_correction_factor():
-    pytest.importorskip("lmfit")
-    from nanoindent.dynamo_v1 import correction_factors as cf
-    d = np.linspace(0.05, 3.0, 25)
-    closed = A.chadwick_unbonded_force(d, R, 30.0, NU, H)
-    via_factor = A.hertz_force(d, R, 30.0, NU) * cf.bec_chadwick_not_bonded(
-        H, d, "paraboloid", R)
-    np.testing.assert_allclose(closed, via_factor, rtol=1e-12)

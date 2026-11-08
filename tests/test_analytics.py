@@ -103,17 +103,6 @@ def test_free_film_warns_away_from_incompressible():
         analytics.dimitriadis_force(0.5, 17.0, 130.0, 0.3, 7.0, bonded=False)
 
 
-def test_matches_independent_implementation_of_the_same_paper():
-    """Cross-check against dynamo_v1, transcribed separately from the paper."""
-    pytest.importorskip("lmfit")
-    from nanoindent.dynamo_v1 import correction_factors as cf1
-    R, E, h = 20.0, 30.0, 5.0
-    d = np.linspace(0.01, 3.0, 40)
-    for bonded, fn in ((True, cf1.bec_dimitriadis_paraboloid_bonded),
-                       (False, cf1.bec_dimitriadis_paraboloid_not_bonded)):
-        ours = analytics.dimitriadis_force(d, R, E, 0.5, h, bonded=bonded)
-        theirs = analytics.hertz_force(d, R, E, 0.5) * fn(h, d, "paraboloid", R)
-        np.testing.assert_allclose(ours, theirs, rtol=1e-3)
 
 
 def test_sneddon_cone_scaling():

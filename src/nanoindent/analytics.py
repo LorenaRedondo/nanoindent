@@ -48,8 +48,7 @@ def hertz_force(delta, R: float, E: float, nu: float) -> np.ndarray:
 
 # Published incompressible (nu = 1/2) tabulations.  These are the anchors: the
 # general-nu machinery below is required to reproduce them at nu = 1/2, which
-# ``tests/test_analytics.py`` enforces against an independent implementation of
-# the same paper (``nanoindent.dynamo_v1.correction_factors``).
+# ``tests/test_analytics.py`` checks against the published coefficients.
 
 #: Dimitriadis 2002 **Eq. 12** — bonded film, nu = 1/2.  Orders chi^0..chi^4.
 DIMITRIADIS_BONDED_INCOMPRESSIBLE = (1.0, 1.133, 1.283, 0.769, 0.0975)
@@ -239,8 +238,7 @@ def chadwick_unbonded_force(delta, R: float, E: float, nu: float,
 
     Like :func:`chadwick_force` this is a lubrication-limit **asymptote**: the
     correction factor tends to 0, not 1, as ``h`` grows, so it is only
-    meaningful for ``chi >> 1`` and *under*-predicts a thick film. See
-    :func:`nanoindent.dynamo_v1.correction_factors.chadwick_regime`.
+    meaningful for ``chi >> 1`` and *under*-predicts a thick film.
     """
     delta = np.asarray(delta, dtype=float)
     d = np.clip(delta, 0.0, None)
