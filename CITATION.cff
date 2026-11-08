@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use nanoindent in your work, please cite it as below."
+title: "nanoindent: FEM simulation and analysis of AFM nanoindentation of thin elastic films"
+type: software
+authors:
+  - alias: "alpibrupa"
+version: 0.1.0
+license: EUPL-1.2
+repository-code: "https://github.com/LorenaRedondo/nanoindent"
+url: "https://lorenaredondo.github.io/nanoindent/"
+keywords:
+  - AFM
+  - atomic force microscopy
+  - nanoindentation
+  - finite element method
+  - contact mechanics

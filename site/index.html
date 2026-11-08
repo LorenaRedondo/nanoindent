@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nanoindent · FEM for AFM nanoindentation</title>
+<meta name="description" content="Open-source Python library for finite-element simulation and analysis of AFM nanoindentation of thin elastic films. Validated against analytic contact mechanics.">
+<meta property="og:title" content="nanoindent">
+<meta property="og:description" content="FEM simulation and analysis of AFM nanoindentation of thin elastic films, validated against analytic contact mechanics.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="media/bottom_effect.png">
+<meta name="theme-color" content="#0b1220">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#f6f8fb;--bg2:#fff;--ink:#0d1626;--muted:#52607a;--line:#dde3ee;--accent:#0a7cff;--accent2:#00a99b;--card:#fff;--code:#0f1a2e;--codeink:#dbe6ff}
+:root[data-theme="dark"]{--bg:#0b1220;--bg2:#0f1a2e;--ink:#e8eefb;--muted:#93a1bd;--line:#1f2d49;--accent:#4da3ff;--accent2:#2ee6cf;--card:#101c33;--code:#070d19}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1220;--bg2:#0f1a2e;--ink:#e8eefb;--muted:#93a1bd;--line:#1f2d49;--accent:#4da3ff;--accent2:#2ee6cf;--card:#101c33;--code:#070d19}}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 system-ui,-apple-system,"Segoe UI",Inter,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+code,pre,.mono{font-family:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace}
+.skip{position:absolute;left:-999px}.skip:focus{left:12px;top:12px;background:var(--bg2);padding:8px 12px;z-index:100}
+.nav{position:fixed;inset:0 0 auto 0;z-index:20;display:flex;justify-content:space-between;align-items:center;padding:14px 28px;color:#f2f6ff;border-bottom:1px solid transparent;transition:.3s}
+.nav.solid{background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-color:var(--line);color:var(--ink)}
+.nav a{color:inherit;margin-left:22px;font-size:15px}.brand{font-weight:700;font-size:18px;margin:0!important;letter-spacing:-.01em}
+.nav nav{display:flex;align-items:center}
+.icon-btn{background:none;border:1px solid currentColor;color:inherit;border-radius:50%;width:32px;height:32px;margin-left:22px;cursor:pointer;opacity:.8}
+.menu-btn{display:none;margin-left:0}
+.hero{position:relative;min-height:100svh;display:flex;align-items:center;background:#07101f;color:#f2f6ff;overflow:hidden}
+#sim{position:absolute;inset:0;width:100%;height:100%}
+.hero::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 15% 45%,rgba(7,16,31,.92),rgba(7,16,31,.35) 70%)}
+.hero-inner{position:relative;z-index:2;max-width:1100px;margin:0 auto;padding:120px 28px 80px;width:100%}
+.badge{display:inline-flex;gap:8px;align-items:center;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:4px 14px;font-size:13px;color:#b6c4e0}
+.badge b{color:#ffb454;font-weight:600}
+h1{font-size:clamp(54px,10vw,120px);line-height:1;margin:18px 0 18px;letter-spacing:-.04em;font-weight:700}
+h1 span{color:var(--accent2)}
+.lead{font-size:clamp(18px,2.2vw,24px);max-width:640px;color:#c5d2ec;margin:0 0 30px}
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px}
+.btn{display:inline-block;padding:12px 22px;border-radius:999px;border:1px solid rgba(255,255,255,.35);color:#fff;font-weight:600}
+.btn:hover{text-decoration:none;background:rgba(255,255,255,.1)}
+.btn.primary{background:var(--accent2);border-color:var(--accent2);color:#04201d}.btn.primary:hover{background:#5df2e0}
+.install{display:inline-flex;max-width:100%;align-items:center;gap:12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 14px;font-size:14px;color:#dbe6ff;overflow-x:auto}
+.install button{background:none;border:1px solid rgba(255,255,255,.3);color:#dbe6ff;border-radius:6px;padding:2px 10px;cursor:pointer;font-size:12px}
+.wrap{max-width:1100px;margin:0 auto;padding:100px 28px 10px}
+h2{font-size:clamp(30px,4vw,44px);margin:0 0 14px;letter-spacing:-.02em}
+.sub{color:var(--muted);max-width:720px;margin:0 0 40px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;transition:.25s}
+.card:hover{transform:translateY(-4px);border-color:var(--accent)}
+.card h3{margin:0 0 8px;font-size:18px}.card p{margin:0;color:var(--muted);font-size:15.5px}
+.card .k{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--accent);margin-bottom:10px;display:block}
+.split{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:40px;align-items:center}
+figure{margin:0}figure img{width:100%;height:auto;border-radius:14px;border:1px solid var(--line);background:#fff}
+figcaption{color:var(--muted);font-size:14px;margin-top:10px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:24px}
+.stats div{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.stats b{display:block;font-size:28px;color:var(--accent2);letter-spacing:-.02em}.stats span{color:var(--muted);font-size:14px}
+pre{background:var(--code);color:var(--codeink);border-radius:14px;padding:20px 22px;overflow-x:auto;font-size:14px;line-height:1.55;margin:0;border:1px solid var(--line)}
+.steps{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}.steps h3{margin:0 0 10px;font-size:15px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}
+.gallery video,.gallery img{width:100%;border-radius:14px;border:1px solid var(--line);background:#000;display:block}
+.table{width:100%;border-collapse:collapse;font-size:15px}
+.table th,.table td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}.table th{color:var(--muted);font-weight:600}
+.notice{background:color-mix(in srgb,#ffb454 12%,var(--card));border:1px solid color-mix(in srgb,#ffb454 45%,var(--line));border-radius:16px;padding:22px 26px}
+.notice h3{margin:0 0 6px}.notice p{margin:0;color:var(--muted)}
+.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.links a{display:flex;flex-direction:column;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;color:var(--ink)}
+.links a:hover{text-decoration:none;border-color:var(--accent)}.links span{color:var(--muted);font-size:14px}
+footer{margin-top:100px;padding:32px 28px;border-top:1px solid var(--line);text-align:center;color:var(--muted);font-size:14px}
+@media (max-width:820px){
+ .menu-btn{display:block}
+ .nav nav{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;align-items:flex-start;padding:8px 16px 16px;background:var(--bg);border-bottom:1px solid var(--line);color:var(--ink)}
+ .nav nav.open{display:flex}.nav nav a{margin:0;padding:12px 0;width:100%;border-bottom:1px solid var(--line)}
+ .nav nav .icon-btn{margin:12px 0 0;color:var(--ink)}.nav{padding:12px 16px}
+ .split,.steps{grid-template-columns:minmax(0,1fr)}.wrap{padding:72px 20px 10px}.hero-inner{padding:100px 20px 80px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav" id="nav">
+  <a class="brand" href="#top">nanoindent</a>
+  <button id="menu" class="icon-btn menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="links">☰</button>
+  <nav id="links" aria-label="Primary">
+    <a href="#features">Features</a>
+    <a href="#validation">Validation</a>
+    <a href="#quickstart">Quick start</a>
+    <a href="#gallery">Gallery</a>
+    <a href="#status">Status</a>
+    <a href="https://github.com/LorenaRedondo/nanoindent">GitHub ↗</a>
+    <button id="theme" class="icon-btn" aria-label="Toggle light/dark theme" title="Toggle theme">◐</button>
+  </nav>
+</header>
+
+<section class="hero" id="top">
+  <canvas id="sim" aria-hidden="true"></canvas>
+  <div class="hero-inner">
+    <span class="badge mono"><b>alpha</b> · open source · EUPL-1.2</span>
+    <h1>nano<span>indent</span></h1>
+    <p class="lead">Finite-element simulation and analysis of AFM nanoindentation of thin elastic films, validated against analytic contact mechanics.</p>
+    <div class="cta">
+      <a class="btn primary" href="#quickstart">Quick start</a>
+      <a class="btn" href="https://github.com/LorenaRedondo/nanoindent">View on GitHub</a>
+    </div>
+    <div class="install mono"><code id="cmd">git clone https://github.com/LorenaRedondo/nanoindent &amp;&amp; cd nanoindent &amp;&amp; uv sync</code><button id="copy" type="button">copy</button></div>
+  </div>
+</section>
+
+<main id="main">
+<section id="features" class="wrap">
+  <h2>What it does</h2>
+  <p class="sub">An open-source Python alternative to the commercial-FEM workflow for AFM indentation of thin films, with the analytic tools to check its answers.</p>
+  <div class="cards">
+    <article class="card"><span class="k mono">solver</span><h3>Axisymmetric contact FEM</h3><p>Small-strain elasticity with P2 elements, an exact spherical gap function and penalty contact solved by an active-set Newton method.</p></article>
+    <article class="card"><span class="k mono">benchmarks</span><h3>Analytic ruler built in</h3><p>Hertz, Dimitriadis 2002, Garcia and Garcia 2018 and Chadwick models, plus mesh, penalty and load-step convergence studies.</p></article>
+    <article class="card"><span class="k mono">analysis</span><h3>Force volume and viscoelasticity</h3><p>Force maps and dynamic moduli E′(ω), E″(ω) from a single solve, since force is exactly proportional to modulus.</p></article>
+    <article class="card"><span class="k mono">membranes</span><h3>Supported lipid bilayers</h3><p>Breakthrough force, area compressibility and modulus from force maps, with a bridge to composition-based predictions.</p></article>
+    <article class="card"><span class="k mono">hs-afm</span><h3>High-speed AFM movies</h3><p>Readers, drift correction, tracking, diffusion and event detection for imaging dynamics.</p></article>
+    <article class="card"><span class="k mono">control</span><h3>Streaming and closed loop</h3><p>Online analysis, safety envelope, run recording and replay, with instrument adapter scaffolds for common AFM vendors.</p></article>
+  </div>
+</section>
+
+<section id="validation" class="wrap">
+  <h2>Validated against analytic closed forms</h2>
+  <p class="sub">Agreement with another solver would show two codes made similar choices. Agreement with Hertz and the published film corrections shows the result is right.</p>
+  <div class="split">
+    <figure>
+      <img src="media/bottom_effect.png" alt="Force versus indentation for 7 and 14 nanometre films: FEM markers against Hertz and bonded Dimitriadis curves, and the stiffening ratio." loading="lazy">
+      <figcaption>Bottom effect for a bonded film (E = 130 MPa, ν = 0.3, R = 17 nm). FEM markers follow the bonded Dimitriadis 2002 correction; the half-space Hertz curve sits well below.</figcaption>
+    </figure>
+    <div>
+      <p>A bonded thin film is stiffer than the Hertz half-space, and thinner films are stiffer still. At δ = 1 nm the solver gives:</p>
+      <div class="stats">
+        <div><b>1.88×</b><span>F / F<sub>Hertz</sub>, h = 7 nm</span></div>
+        <div><b>1.34×</b><span>F / F<sub>Hertz</sub>, h = 14 nm</span></div>
+      </div>
+      <p style="margin-top:20px;color:var(--muted)">Equilibrium is checked with two independent reaction-force measures, and the test suite pins the solver to analytic laws in the thick-film limit.</p>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart" class="wrap">
+  <h2>Quick start</h2>
+  <p class="sub">Python 3.11+. The default backend is scikit-fem, installed from PyPI with no compiler needed.</p>
+  <div class="steps">
+    <div>
+      <h3>1 · Install with uv</h3>
+<pre><code>git clone https://github.com/LorenaRedondo/nanoindent.git
+cd nanoindent
+uv sync
+uv run python examples/paper_reproduction.py</code></pre>
+    </div>
+    <div>
+      <h3>2 · Run a simulation</h3>
+<pre><code>from nanoindent import SimulationConfig, IndentationSolver
+
+cfg = SimulationConfig(R=17.0, E=130.0, nu=0.3,
+                       h=7.0, L=100.0, delta_max=1.0)
+result = IndentationSolver(cfg).run()
+result.plot(compare=["hertz", "dimitriadis_bonded"])</code></pre>
+    </div>
+  </div>
+  <p style="margin-top:20px;color:var(--muted)">Lengths in nm, moduli in MPa, forces in pN. Optional features install as extras, for example <code>uv sync --extra web --extra viz</code>.</p>
+</section>
+
+<section id="gallery" class="wrap">
+  <h2>Gallery</h2>
+  <p class="sub">All figures and animations are generated by the scripts in <code>examples/</code> from simulated data.</p>
+  <div class="gallery">
+    <figure><video src="media/fem_insertions_video.mp4" controls muted loop playsinline preload="none"></video><figcaption>FEM von Mises stress as a rigid tip is driven into the film.</figcaption></figure>
+    <figure><video src="media/force_volume_video.mp4" controls muted loop playsinline preload="none"></video><figcaption>A force map acquired pixel by pixel over a two-phase sample.</figcaption></figure>
+    <figure><video src="media/afm_recovery_video.mp4" controls muted loop playsinline preload="none"></video><figcaption>Viscoelastic recovery between lateral pokes.</figcaption></figure>
+    <figure><img src="media/field_heatmap.png" alt="Von Mises stress and vertical displacement fields under a spherical tip." loading="lazy"><figcaption>Von Mises stress and vertical displacement at δ = 1 nm.</figcaption></figure>
+  </div>
+</section>
+
+<section id="status" class="wrap">
+  <h2>Project status</h2>
+  <div class="notice">
+    <h3>Alpha software, use at your own risk</h3>
+    <p>nanoindent began as an internal research tool. The API may change between releases, and the software is provided as is, without warranty. Validate results independently before they inform scientific conclusions.</p>
+  </div>
+  <h2 style="margin-top:56px">Resources</h2>
+  <div class="links">
+    <a href="https://github.com/LorenaRedondo/nanoindent"><b>Source code</b><span>GitHub repository</span></a>
+    <a href="https://github.com/LorenaRedondo/nanoindent/blob/main/docs/design.md"><b>Design notes</b><span>Modelling and numerical rationale</span></a>
+    <a href="https://github.com/LorenaRedondo/nanoindent/blob/main/CHANGELOG.md"><b>Changelog</b><span>What changed and when</span></a>
+    <a href="https://github.com/LorenaRedondo/nanoindent/blob/main/CONTRIBUTING.md"><b>Contribute</b><span>Issues and pull requests welcome</span></a>
+    <a href="https://github.com/LorenaRedondo/nanoindent/blob/main/CITATION.cff"><b>Cite</b><span>Citation metadata</span></a>
+    <a href="https://eupl.eu/1.2/en/"><b>EUPL-1.2</b><span>Licence text</span></a>
+  </div>
+</section>
+</main>
+
+<footer><p>nanoindent · Licensed under the <a href="https://github.com/LorenaRedondo/nanoindent/blob/main/LICENSE">EUPL-1.2</a></p></footer>
+
+<script>
+const nav=document.getElementById('nav');
+const onScroll=()=>nav.classList.toggle('solid',scrollY>innerHeight*0.7);
+addEventListener('scroll',onScroll,{passive:true});onScroll();
+const root=document.documentElement;
+try{const t=localStorage.getItem('theme');if(t)root.dataset.theme=t}catch(e){}
+document.getElementById('theme').addEventListener('click',()=>{
+  const dark=matchMedia('(prefers-color-scheme: dark)').matches;
+  const cur=root.dataset.theme||(dark?'dark':'light');const next=cur==='dark'?'light':'dark';
+  root.dataset.theme=next;try{localStorage.setItem('theme',next)}catch(e){}
+});
+(()=>{const b=document.getElementById('menu'),n=document.getElementById('links');
+  const set=o=>{n.classList.toggle('open',o);b.setAttribute('aria-expanded',o)};
+  b.addEventListener('click',()=>set(!n.classList.contains('open')));
+  n.addEventListener('click',e=>{if(e.target.tagName==='A')set(false)});})();
+document.getElementById('copy').addEventListener('click',async e=>{
+  try{await navigator.clipboard.writeText(document.getElementById('cmd').textContent);e.target.textContent='copied'}catch(_){e.target.textContent='press ctrl+c'}
+  setTimeout(()=>e.target.textContent='copy',1500)});
+
+// Hero: schematic of a spherical tip indenting a thin film (illustration, not simulation output)
+(()=>{
+  const c=document.getElementById('sim'),g=c.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,t=0;
+  const resize=()=>{const d=Math.min(devicePixelRatio||1,2);W=c.clientWidth;H=c.clientHeight;c.width=W*d;c.height=H*d;g.setTransform(d,0,0,d,0,0)};
+  addEventListener('resize',resize);resize();
+  const draw=()=>{
+    g.clearRect(0,0,W,H);
+    const cx=W*0.68,top=H*0.62,film=Math.min(90,H*0.12),R=Math.min(130,W*0.16);
+    const ph=(Math.sin(t)+1)/2, d=ph*film*0.45;          // indentation depth
+    // film
+    g.fillStyle='rgba(77,163,255,.10)';g.fillRect(0,top,W,film);
+    g.strokeStyle='rgba(120,170,255,.45)';g.lineWidth=1.5;g.strokeRect(0,top,W,film);
+    g.fillStyle='rgba(120,170,255,.18)';g.fillRect(0,top+film,W,H);
+    // deformed surface + stress glow
+    const a=Math.sqrt(R*d);
+    g.beginPath();g.moveTo(0,top);
+    for(let x=0;x<=W;x+=4){const r=x-cx,s=Math.abs(r)<a*3?d*Math.exp(-Math.pow(r/(a*1.6+1),2)):0;g.lineTo(x,top+s)}
+    g.strokeStyle='rgba(46,230,207,.9)';g.lineWidth=2;g.stroke();
+    const grd=g.createRadialGradient(cx,top+film*0.6,2,cx,top+film*0.6,a*3+30);
+    grd.addColorStop(0,`rgba(46,230,207,${0.05+0.45*ph})`);grd.addColorStop(1,'rgba(46,230,207,0)');
+    g.fillStyle=grd;g.fillRect(cx-a*4-40,top,a*8+80,film*1.6);
+    // tip
+    const tipY=top-R+d;
+    g.beginPath();g.arc(cx,tipY,R,0,Math.PI*2);
+    g.fillStyle='rgba(7,16,31,.85)';g.fill();g.strokeStyle='rgba(255,180,84,.95)';g.lineWidth=2;g.stroke();
+    // cantilever
+    g.beginPath();g.moveTo(cx,tipY-R);g.lineTo(cx+W*0.35,tipY-R-H*0.18);
+    g.strokeStyle='rgba(255,255,255,.25)';g.lineWidth=3;g.stroke();
+    // force curve trace (F ~ d^1.5)
+    const gx=W*0.08,gy=H*0.82,gw=Math.min(240,W*0.3),gh=Math.min(150,H*0.2);
+    g.strokeStyle='rgba(255,255,255,.25)';g.lineWidth=1;g.beginPath();g.moveTo(gx,gy-gh);g.lineTo(gx,gy);g.lineTo(gx+gw,gy);g.stroke();
+    g.beginPath();for(let u=0;u<=1.001;u+=0.02){const X=gx+u*gw,Y=gy-Math.pow(u,1.5)*gh;u?g.lineTo(X,Y):g.moveTo(X,Y)}
+    g.strokeStyle='rgba(120,170,255,.5)';g.stroke();
+    const u=ph;g.beginPath();g.arc(gx+u*gw,gy-Math.pow(u,1.5)*gh,5,0,Math.PI*2);g.fillStyle='#2ee6cf';g.fill();
+  };
+  const loop=()=>{t+=0.015;draw();if(!reduce)requestAnimationFrame(loop)};
+  if(reduce)t=1.2;loop();
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,12 @@
 # nanoindent
 
 [![CI](https://github.com/LorenaRedondo/nanoindent/actions/workflows/ci.yml/badge.svg)](https://github.com/LorenaRedondo/nanoindent/actions/workflows/ci.yml)
+[![License: EUPL-1.2](https://img.shields.io/badge/license-EUPL--1.2-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](#project-status)
+[![Managed with uv](https://img.shields.io/badge/managed%20with-uv-6c47ff.svg)](https://docs.astral.sh/uv/)
+
+**Website:** <https://lorenaredondo.github.io/nanoindent/>
 
 FEM simulation of **AFM nanoindentation of thin elastic films** by a rigid
 spherical tip — an open-source Python alternative to the commercial-FEM
@@ -58,29 +64,59 @@ Dimitriadis 2002 correction (dashed); (B) the stiffening ratio F/F_Hertz.*
 
 ## Installation
 
-### Primary backend (design target): FEniCSx / dolfinx
+nanoindent requires **Python 3.11+**. The default backend is
+[scikit-fem](https://scikit-fem.readthedocs.io/), which installs from PyPI with
+no compiler or conda needed.
 
-The design targets **dolfinx** with the **gmsh** mesher. dolfinx is best
-installed via conda-forge (do **not** attempt a pip-only install):
+### With uv (recommended)
+
+```bash
+git clone https://github.com/LorenaRedondo/nanoindent.git
+cd nanoindent
+uv sync                       # creates .venv, installs the package + dev tools from uv.lock
+uv run python examples/paper_reproduction.py
+```
+
+To use it as a dependency of your own project:
+
+```bash
+uv add "nanoindent @ git+https://github.com/LorenaRedondo/nanoindent"
+```
+
+### With pip
+
+```bash
+pip install "git+https://github.com/LorenaRedondo/nanoindent"
+```
+
+### Optional extras
+
+| extra | adds | for |
+|---|---|---|
+| `viz` | pyvista, imageio-ffmpeg | 3D fields and MP4 animations |
+| `video` | Pillow, imageio-ffmpeg | HS-AFM movie readers and MP4 export |
+| `afm` | igor2 | Asylum `.ibw` files |
+| `report` | pandas | rich tables in `nanoindent.report` |
+| `docs` | python-docx, python-pptx, Pillow | `.docx` / `.pptx` export examples |
+| `tracking` | mlflow | experiment tracking export |
+| `web` | streamlit | interactive dashboard |
+
+```bash
+uv sync --extra web --extra viz        # with uv
+pip install "nanoindent[web,viz]"      # with pip
+```
+
+### Alternative backend: FEniCSx / dolfinx
+
+The design also targets **dolfinx** with the **gmsh** mesher, best installed
+through conda-forge (do not attempt a pip-only install):
 
 ```bash
 conda install -c conda-forge fenics-dolfinx mpich pyvista gmsh python-gmsh
 ```
 
-### Default backend here: scikit-fem (pure pip)
-
-This repository's shipped backend uses **scikit-fem**, the design's sanctioned
-pure-pip fallback, so it installs and runs anywhere without conda:
-
-```bash
-pip install -e .
-# or with test deps:
-pip install -e ".[test]"
-```
-
 Only `solver.py` is backend-specific (weak-form assembly); `config`, `contact`,
-`geometry`, `analytics`, and `postproc` are backend-agnostic, so a dolfinx
-backend can be dropped in without touching the rest of the API.
+`geometry`, `analytics` and `postproc` are backend-agnostic.
 
 ---
 
@@ -109,7 +145,7 @@ result.plot(compare=["hertz", "dimitriadis_bonded", "garcia_bec"])
 Reproduce both paper thicknesses with one command:
 
 ```bash
-python examples/paper_reproduction.py           # writes results/{h7,h14}.csv + PNGs
+uv run python examples/paper_reproduction.py   # writes results/{h7,h14}.csv + PNGs
 python examples/hertz_validation.py             # thick-film Hertz check
 python examples/mofem_cross_check.py            # MoFEM's axisymmetric benchmark; mesh-scatter floor
 python examples/synthetic_analysis.py           # realistic dataset -> modulus recovery
@@ -278,7 +314,7 @@ curve (with analytic overlays), the von Mises / displacement / pressure field
 heatmap, solution diagnostics, and a modulus fit, all from the real solver:
 
 ```bash
-pip install -e ".[web]"
+uv sync --extra web
 streamlit run dashboard/app.py
 ```
 
@@ -907,15 +943,15 @@ Physics-validation tests (pytest `-m slow`) check:
    thinner bonded film is stiffer than a thicker one.
 
 ```bash
-pytest -m "not slow"     # fast unit suite
-pytest -m slow           # physics validation (~15 s)
-pytest                   # everything
+uv run pytest -m "not slow"     # fast unit suite
+uv run pytest -m slow           # physics validation (~15 s)
+uv run pytest                   # everything
 ```
 
-Coverage (needs `pip install -e ".[test]"`, which pulls in `pytest-cov`):
+Coverage (`pytest-cov` is part of the default `dev` dependency group):
 
 ```bash
-pytest -m "not slow" --cov=nanoindent --cov-report=term-missing
+uv run pytest -m "not slow" --cov=nanoindent --cov-report=term-missing
 ```
 
 CI runs the fast suite with branch coverage on every push/PR (`.github/workflows/ci.yml`),
@@ -992,6 +1028,27 @@ Full rationale in [`docs/design.md` §7](docs/design.md).
 - Garcia & Garcia, *Biophys. J.* **114**, 2923 (2018) — bottom-effect
   correction for paraboloidal tips.
 
+## Project status
+
+nanoindent is **alpha** software. It began as an internal research tool; the
+API may change between releases and results should be validated independently
+before they inform scientific conclusions. See the
+[`CHANGELOG`](CHANGELOG.md).
+
+## Contributing
+
+Bug reports, questions and pull requests are welcome. Read
+[`CONTRIBUTING.md`](CONTRIBUTING.md) first, and note the
+[Code of Conduct](CODE_OF_CONDUCT.md). To report a security issue see
+[`SECURITY.md`](SECURITY.md).
+
+## Citation
+
+If you use nanoindent in published work, please cite it. GitHub's
+**Cite this repository** button reads [`CITATION.cff`](CITATION.cff).
+
 ## License
 
-MIT.
+Released under the [European Union Public Licence v. 1.2](LICENSE) (EUPL-1.2).
+The EUPL is a copyleft licence: modified versions you distribute must remain
+under the EUPL or a licence it lists as compatible.

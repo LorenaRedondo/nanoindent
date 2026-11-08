@@ -1,6 +1,6 @@
 """LIPIVERSE adapter — composition-derived membrane properties for SLB runs.
 
-Bridges the `LIPIVERSE <../../lipids>`_ lipid atlas (a TypeScript service exposing
+Bridges the LIPIVERSE lipid atlas (a TypeScript service exposing
 a REST API) to this library, so a supported-lipid-bilayer (SLB) experiment can be
 configured from a **lipid species name** (``"PC 34:1"``) instead of a hand-set
 film thickness.
