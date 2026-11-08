@@ -1038,6 +1038,12 @@ Full rationale in [`docs/design.md` §7](docs/design.md).
 - Garcia & Garcia, *Biophys. J.* **114**, 2923 (2018) — bottom-effect
   correction for paraboloidal tips.
 
+## About
+
+nanoindent is a collaboration between
+[Lorena Redondo-Morata's lab](https://lorenaredondo.github.io/lrm-www/) and
+[Alpibru](https://alpibru.com).
+
 ## Project status
 
 nanoindent is **alpha** software. It began as an internal research tool; the
