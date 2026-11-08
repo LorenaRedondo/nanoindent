@@ -1,6 +1,6 @@
 # nanoindent
 
-[![CI](https://github.com/alpibrusl/afm-finite-elements/actions/workflows/ci.yml/badge.svg)](https://github.com/alpibrusl/afm-finite-elements/actions/workflows/ci.yml)
+[![CI](https://github.com/LorenaRedondo/nanoindent/actions/workflows/ci.yml/badge.svg)](https://github.com/LorenaRedondo/nanoindent/actions/workflows/ci.yml)
 
 FEM simulation of **AFM nanoindentation of thin elastic films** by a rigid
 spherical tip — an open-source Python alternative to the commercial-FEM

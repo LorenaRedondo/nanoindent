@@ -55,7 +55,7 @@ nanoindent-control = "nanoindent.control:main"
 nanoindent-runs = "nanoindent.tracking:main"
 
 [project.urls]
-Homepage = "https://github.com/alpibrusl/afm-finite-elements"
+Homepage = "https://github.com/LorenaRedondo/nanoindent"
 
 [tool.setuptools.packages.find]
 where = ["src"]
