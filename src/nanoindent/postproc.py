@@ -46,6 +46,24 @@ class ForceCurve:
     max_penetration: np.ndarray = field(default_factory=lambda: np.array([]))
     cfg: Optional[SimulationConfig] = None
     n_dofs: Optional[int] = None
+    newton_log: list = field(default_factory=list)
+    """Per-load-step Newton diagnostics (iterations, convergence, residual)."""
+
+    # -- applicability and numerical quality -------------------------------
+    def applicability(self):
+        """Model assumptions, dimensionless ratios and applicability warnings.
+
+        See :func:`nanoindent.quality.applicability`.
+        """
+        if self.cfg is None:
+            raise ValueError("cfg is required to assess applicability")
+        from .quality import applicability
+        return applicability(self.cfg, self)
+
+    def quality_report(self):
+        """Numerical-quality report for this run (see :mod:`nanoindent.quality`)."""
+        from .quality import quality_report
+        return quality_report(self)
 
     # -- diagnostics -------------------------------------------------------
     @property

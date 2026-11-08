@@ -232,6 +232,7 @@ class IndentationSolver:
 
         # Reference residual scale for the relative tolerance.
         r0 = None
+        converged = True
         for it in range(cfg.newton_max_it):
             Rc, Kc = self._contact_forms(fb, u, delta)
             residual = K @ u + Rc
@@ -254,6 +255,8 @@ class IndentationSolver:
                 f"Newton did not converge at delta={delta:.4f} nm "
                 f"(|R|/|R0|={rnorm / r0:.2e})", stacklevel=2,
             )
+            converged = False
+        self._log_newton(delta, it + 1, converged, rnorm / r0)
         return u
 
     def _solve_step_mixed(self, u0: np.ndarray, delta: float, fb: FacetBasis):
@@ -269,6 +272,7 @@ class IndentationSolver:
             else np.zeros(Np)
 
         r0 = None
+        converged = True
         for it in range(cfg.newton_max_it):
             Rc, Kc = self._contact_forms(fb, u, delta)
             # Residual blocks
@@ -296,8 +300,20 @@ class IndentationSolver:
                 f"Newton (mixed) did not converge at delta={delta:.4f} nm "
                 f"(|R|/|R0|={rnorm / r0:.2e})", stacklevel=2,
             )
+            converged = False
+        self._log_newton(delta, it + 1, converged, rnorm / r0)
         self._p = p
         return u
+
+    def _log_newton(self, delta: float, iters: int, converged: bool,
+                    rel_residual: float) -> None:
+        """Record per-load-step Newton diagnostics for the quality report."""
+        log = getattr(self, "_newton_log", None)
+        if log is None:
+            log = self._newton_log = []
+        log.append({"delta": float(delta), "iterations": int(iters),
+                    "converged": bool(converged),
+                    "relative_residual": float(rel_residual)})
 
     def _free_mask(self) -> np.ndarray:
         mask = np.ones(self.basis.N, dtype=bool)
@@ -488,6 +504,7 @@ class IndentationSolver:
         maxpen = np.zeros(n)
 
         self.history = []
+        self._newton_log = []
         u = np.zeros(self.basis.N)
         if self.mixed:
             self._p = np.zeros(self.basis_p.N)
@@ -517,6 +534,7 @@ class IndentationSolver:
             max_penetration=maxpen,
             cfg=cfg,
             n_dofs=self.basis.N,
+            newton_log=list(self._newton_log),
         )
         self._check_quality(curve)
         return curve

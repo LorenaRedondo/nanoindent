@@ -409,6 +409,16 @@ coefficient (`examples/chadwick_verification.py`):
 
 ## Convergence & validation
 
+See the [validation matrix](docs/validation.md) for what is checked against which
+reference, over what range, and by which test. Every run can report its model
+assumptions and numerical quality:
+
+```python
+curve = IndentationSolver(cfg).run()
+curve.applicability()    # assumptions, delta/h ratios, warnings
+curve.quality_report()   # equilibrium, penetration, Newton convergence, versions
+```
+
 `nanoindent.convergence` provides three studies ([`docs/design.md` §6.1](docs/design.md)):
 
 ```python

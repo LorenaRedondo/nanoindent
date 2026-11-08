@@ -7,6 +7,13 @@ follow [Semantic Versioning](https://semver.org/) once it leaves alpha.
 ## [Unreleased]
 
 ### Added
+- `nanoindent.quality`: machine-readable applicability metadata (assumptions,
+  depth/thickness and contact-radius/thickness ratios, warnings) and a
+  numerical-quality report (equilibrium residual, interpenetration, per-step
+  Newton convergence, software versions), available as
+  `ForceCurve.applicability()` and `ForceCurve.quality_report()`.
+- `docs/validation.md`: validation matrix linking each benchmark to its
+  reference, configuration, asserted tolerance and test.
 - Public open-source release under the EUPL-1.2.
 - `uv`-managed project: `uv.lock`, `dev` dependency group, `uv sync` workflow.
 - Community files (contributing guide, code of conduct, security policy,
